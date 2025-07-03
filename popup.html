@@ -43,6 +43,7 @@
     }
     .tab-button {
         flex-grow: 1;
+        color: black;
         border: 1px solid #ccc;
         background: #f0f0f0;
         padding: 5px 10px;
@@ -115,7 +116,7 @@
     <div class="tab-nav">
         <button class="tab-button active" data-tab="main-tab">Main</button>
         <button class="tab-button" data-tab="settings-tab">Settings</button>
-        <button class="tab-button" data-tab="user-info-tab">User Info</button>
+        <button class="tab-button" data-tab="about-tab">About</button>
     </div>
 
     <!-- Main Tab -->
@@ -161,15 +162,15 @@
             </div>
              <div id="sharepoint-list-status"></div>
         </div>
-
-        <div id="user-info-tab" class="tab-content">
-            <h3>User Information</h3>
-            <div id="user-info-container">
-                <p>Loading user data...</p>
-            </div>
-        </div>
     </div>
 
-    <script src="popup.js"></script>
+    <!-- About Tab -->
+    <div id="about-tab" class="tab-content">
+        <h3>About</h3>
+        <p>SW Extension v1.0</p>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
 </body>
 </html>

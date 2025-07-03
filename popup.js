@@ -17,7 +17,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const saveFeatureSettingsButton = document.getElementById('save-feature-settings');
     const ms365LoginButton = document.getElementById('ms365-login-button');
     const ms365LogoutButton = document.getElementById('ms365-logout-button');
-    const saveSharePointListButton = document.getElementById('save-sharepoint-list');
+    // The save button is no longer needed, selection is saved on change.
+    // const saveSharePointListButton = document.getElementById('save-sharepoint-list');
 
     // --- View Management ---
     function showView(viewToShow) {
@@ -323,6 +324,27 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Event listener to save the SharePoint list on selection change
+    document.getElementById('sharepoint-list-select').addEventListener('change', (event) => {
+        const selectedListId = event.target.value;
+        const statusDiv = document.getElementById('sharepoint-list-status');
+
+        if (selectedListId && selectedListId !== 'Error loading lists' && selectedListId !== 'No lists found') {
+            chrome.storage.local.set({ selectedSharePointList: selectedListId }, () => {
+                console.log('SharePoint list selection saved.');
+                statusDiv.textContent = 'Selection saved!';
+                statusDiv.style.color = 'green';
+                setTimeout(() => statusDiv.textContent = '', 3000); // Clear message after 3 seconds
+            });
+        } else {
+            // This case might not be necessary if the dropdown only contains valid lists or a disabled default
+            statusDiv.textContent = 'Please select a valid list.';
+            statusDiv.style.color = 'red';
+        }
+    });
+
+    // The dedicated save button is no longer needed.
+    /*
     saveSharePointListButton.addEventListener('click', () => {
         const selectedListId = document.getElementById('sharepoint-list-select').value;
         const statusDiv = document.getElementById('sharepoint-list-status');
@@ -339,6 +361,7 @@ document.addEventListener('DOMContentLoaded', () => {
             statusDiv.style.color = 'red';
         }
     });
+    */
 
     // --- Initial Load ---
     checkExtensionAuthState(); // This is now the main entry point
