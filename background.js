@@ -224,34 +224,81 @@ async function getAccessToken() {
             }
 
             if (data.ms365_token && Date.now() < data.ms365_token_expiry) {
-                console.log('Found valid access token.');
+                console.log("Found valid MS365 access token.");
                 resolve(data.ms365_token);
             } else if (data.ms365_refresh_token) {
-                console.log('Access token expired, attempting to refresh...');
-                // If token is expired, try to refresh it (implementation not shown)
-                // For now, we just reject, forcing a re-login for simplicity.
-                reject(new Error('MS365 token is expired. Please log in again.'));
+                console.log("MS365 access token expired, attempting to refresh.");
+                refreshAccessToken(data.ms365_refresh_token)
+                    .then(newAccessToken => resolve(newAccessToken))
+                    .catch(error => {
+                        console.error("Failed to refresh token, user needs to login again.", error);
+                        reject(new Error('MS365 session expired. Please log in again.'));
+                    });
             } else {
-                reject(new Error('MS365 token is missing. Please log in again.'));
+                reject(new Error('MS365 token not found. Please log in.'));
             }
         });
     });
 }
 
-// Listen for messages from the popup
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.action === 'get_access_token') {
-        getAccessToken()
-            .then(token => sendResponse({ success: true, token: token }))
-            .catch(error => sendResponse({ success: false, error: error.message }));
-        return true; // Indicates that the response is sent asynchronously
+async function refreshAccessToken(refreshToken) {
+    const manifest = getManifest();
+    const clientId = manifest.oauth2.client_id;
+    const tenantId = manifest.oauth2.tenant_id;
+    const scopes = manifest.oauth2.scopes.join(' ');
+
+    const tokenUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`;
+    const params = new URLSearchParams();
+    params.append('client_id', clientId);
+    params.append('scope', scopes);
+    params.append('refresh_token', refreshToken);
+    params.append('grant_type', 'refresh_token');
+
+    const response = await fetch(tokenUrl, {
+        method: 'POST',
+        body: params,
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded'
+        }
+    });
+
+    const tokenData = await response.json();
+    if (!response.ok) {
+        throw new Error(tokenData.error_description || 'Token refresh failed.');
     }
 
+    const expiryTime = Date.now() + (tokenData.expires_in * 1000);
+    await new Promise((resolve, reject) => {
+        chrome.storage.local.set({
+            ms365_token: tokenData.access_token,
+            ms365_refresh_token: tokenData.refresh_token,
+            ms365_token_expiry: expiryTime
+        }, () => {
+            if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+            else {
+                console.log('MS365 tokens refreshed and stored successfully.');
+                resolve();
+            }
+        });
+    });
+
+    return tokenData.access_token;
+}
+
+// Listen for messages from the popup
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'ms365_login') {
         authenticate(true)
             .then(token => sendResponse({ success: true, token: token }))
             .catch(error => sendResponse({ success: false, error: error.message }));
         return true; // Indicates that the response is sent asynchronously
+    }
+
+    if (request.action === 'get_access_token') {
+        getAccessToken()
+            .then(token => sendResponse({ success: true, token: token }))
+            .catch(error => sendResponse({ success: false, error: error.message }));
+        return true; // Required for async sendResponse
     }
 
     if (request.action === 'fetch_sharepoint_lists') {

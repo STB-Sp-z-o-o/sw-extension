@@ -229,11 +229,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- MS365 & SharePoint Logic ---
     async function checkLoginStatus() {
         try {
-            await chrome.runtime.sendMessage({ action: 'get_access_token' });
-            updateUiWithLoginStatus(true);
+            const response = await chrome.runtime.sendMessage({ action: 'get_access_token' });
+            if (response && response.success) {
+                console.log('MS365 is connected.');
+                updateUiWithLoginStatus(true);
+            } else {
+                console.log('MS365 is not connected.', response ? response.error : 'No response');
+                updateUiWithLoginStatus(false);
+            }
         } catch (error) {
-            // This error is expected if the token is missing/expired
-            console.log('Not logged into MS365.');
+            // This catch block handles errors where the sendMessage itself fails
+            console.error('Error checking MS365 login status:', error);
             updateUiWithLoginStatus(false);
         }
     }
