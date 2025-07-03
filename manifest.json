@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "Serwis STB Enhancer",
+  "version": "1.5",
+  "description": "Enhances the STB Serwis platform with additional features.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "identity"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://serwis.stb.tech/*"],
+      "js": ["lib/xlsx.full.min.js", "content.js"]
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "oauth2": {
+    "client_id": "fdc1e0a9-38d3-475d-a89b-8b9147efed00",
+    "tenant_id": "d67b6f10-59b2-4f51-9b9d-db7558d21939",
+    "scopes": [
+      "https://graph.microsoft.com/User.Read",
+      "https://graph.microsoft.com/Sites.Read.All"
+    ]
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["lib/xlsx.full.min.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

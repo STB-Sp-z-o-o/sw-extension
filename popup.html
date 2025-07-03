@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>SW Extension</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      width: 350px; /* Increased width for better layout */
+      padding: 10px;
+    }
+    #settings, #login, #main-container {
+      margin-top: 10px;
+    }
+    input[type="text"], input[type="password"] {
+      width: calc(100% - 12px); /* Adjusted for padding */
+      margin-bottom: 5px;
+      padding: 5px;
+    }
+    button {
+        padding: 8px 12px;
+        border: none;
+        background-color: #007bff;
+        color: white;
+        cursor: pointer;
+        width: 100%;
+        margin-top: 5px;
+        border-radius: 4px; /* Added border-radius */
+    }
+    button:hover {
+        background-color: #0056b3;
+    }
+    button.secondary {
+        background-color: #6c757d;
+    }
+    button.secondary:hover {
+        background-color: #5a6268;
+    }
+    .tab-nav {
+        border-bottom: 1px solid #ccc;
+        padding-bottom: 5px;
+        margin-bottom: 10px;
+        display: flex;
+    }
+    .tab-button {
+        flex-grow: 1;
+        border: 1px solid #ccc;
+        background: #f0f0f0;
+        padding: 5px 10px;
+        cursor: pointer;
+        margin: 0;
+        border-radius: 4px 4px 0 0; /* Rounded top corners */
+    }
+    .tab-button.active {
+        background: #fff;
+        border-bottom-color: #fff;
+    }
+    .tab-content {
+        display: none;
+    }
+    .tab-content.active {
+        display: block;
+    }
+    .setting-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+        padding: 8px; /* Increased padding */
+        border: 1px solid #eee; /* Added border */
+        border-radius: 4px;
+    }
+    .setting-item label {
+        margin-right: 10px;
+    }
+    hr {
+        border: 0;
+        height: 1px;
+        background: #ccc;
+        margin: 20px 0;
+    }
+    #sharepoint-list-select {
+        flex-grow: 1;
+        margin-right: 5px;
+    }
+    #save-sharepoint-list {
+        width: auto;
+    }
+    #ms365-status, #sharepoint-list-status {
+        margin-top: 10px;
+        font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- View for initial extension setup (API keys etc.) -->
+  <div id="initial-setup-view" style="display: none;">
+    <h2>Initial Setup</h2>
+    <input type="text" id="client_id" placeholder="Client ID">
+    <input type="password" id="auth_token" placeholder="Auth Token">
+    <input type="text" id="api_url" placeholder="API URL">
+    <button id="save_settings">Save</button>
+  </div>
+
+  <!-- View for extension login -->
+  <div id="login-view" style="display: none;">
+    <h2>Login</h2>
+    <input type="text" id="username" placeholder="Username">
+    <input type="password" id="password" placeholder="Password">
+    <button id="login_button">Login</button>
+  </div>
+
+  <!-- Main container shown when logged in -->
+  <div id="main-container" style="display: none;">
+    <div class="tab-nav">
+        <button class="tab-button active" data-tab="main-tab">Main</button>
+        <button class="tab-button" data-tab="settings-tab">Settings</button>
+        <button class="tab-button" data-tab="user-info-tab">User Info</button>
+    </div>
+
+    <!-- Main Tab -->
+    <div id="main-tab" class="tab-content active">
+        <p>Logged in as: <span id="loggedInUser"></span></p>
+        <hr>
+        <h3>MS365 Integration</h3>
+        <div id="ms365-status">Status: <span id="ms365-connection-status" style="color:red;">Not Connected</span></div>
+        <button id="ms365-login-button" style="display: block;">Connect with MS365</button>
+        <button id="ms365-logout-button" style="display: none;">Disconnect from MS365</button>
+        <hr>
+        <button id="logout_button" class="secondary">Logout from Extension</button>
+    </div>
+
+    <!-- Settings Tab -->
+    <div id="settings-tab" class="tab-content">
+        <h3>Feature Toggles</h3>
+        <div class="setting-item">
+            <label for="toggle-commission-page">Commission Page</label>
+            <input type="checkbox" id="toggle-commission-page" class="feature-toggle" data-feature="commissionPage">
+        </div>
+        <div class="setting-item">
+            <label for="toggle-credentials-page">Credentials Page</label>
+            <input type="checkbox" id="toggle-credentials-page" class="feature-toggle" data-feature="credentialsPage">
+        </div>
+        <div class="setting-item">
+            <label for="toggle-edit-page">Permissions Table</label>
+            <input type="checkbox" id="toggle-edit-page" class="feature-toggle" data-feature="editPage">
+        </div>
+        <div class="setting-item">
+            <label for="toggle-material-cost-enhancement">Material Cost</label>
+            <input type="checkbox" id="toggle-material-cost-enhancement" class="feature-toggle" data-feature="materialCost">
+        </div>
+        <button id="save-feature-settings">Save Toggles</button>
+
+        <div id="ms365-settings" style="display: none;">
+            <hr>
+            <h3>SharePoint Integration</h3>
+            <div class="setting-item">
+                <label for="sharepoint-list-select">Select List:</label>
+                <select id="sharepoint-list-select"></select>
+                <button id="save-sharepoint-list">Save</button>
+            </div>
+             <div id="sharepoint-list-status"></div>
+        </div>
+
+        <div id="user-info-tab" class="tab-content">
+            <h3>User Information</h3>
+            <div id="user-info-container">
+                <p>Loading user data...</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>
