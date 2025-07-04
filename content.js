@@ -373,7 +373,15 @@ function openFilterManager() {
     modalContent.innerHTML = `
         <h3>Zarządzaj filtrami</h3>
         <p>Przeciągnij i upuść, aby zmienić kolejność. Odznacz, aby ukryć.</p>
-        <ul id="filter-list-manager" style="list-style: none; padding: 0; margin-bottom: 15px;"></ul>
+        
+        <input type="text" id="filter-search-input" placeholder="Wyszukaj filtry..." style="width: 100%; box-sizing: border-box; margin-bottom: 10px; padding: 8px; border: 1px solid #ccc; border-radius: 3px;">
+        
+        <div style="margin-bottom: 15px;">
+            <button id="select-all-filters-btn" class="btn btn-default btn-sm" style="margin-right: 5px;">Zaznacz wszystkie</button>
+            <button id="deselect-all-filters-btn" class="btn btn-default btn-sm">Odznacz wszystkie</button>
+        </div>
+
+        <ul id="filter-list-manager" style="list-style: none; padding: 0; margin-bottom: 15px; max-height: 40vh; overflow-y: auto;"></ul>
         <button id="save-filters-btn" class="btn btn-primary">Zapisz</button>
         <button id="cancel-filters-btn" class="btn btn-default">Anuluj</button>
     `;
@@ -382,6 +390,35 @@ function openFilterManager() {
     document.body.appendChild(modal);
 
     populateFilterManager();
+
+    // Event listeners for new controls
+    document.getElementById('select-all-filters-btn').addEventListener('click', () => {
+        document.querySelectorAll('#filter-list-manager li').forEach(li => {
+            // Only check visible items if a search is active
+            if (li.style.display !== 'none') {
+                const cb = li.querySelector('input[type="checkbox"]');
+                if (cb) cb.checked = true;
+            }
+        });
+    });
+
+    document.getElementById('deselect-all-filters-btn').addEventListener('click', () => {
+        document.querySelectorAll('#filter-list-manager li').forEach(li => {
+            // Only uncheck visible items if a search is active
+            if (li.style.display !== 'none') {
+                const cb = li.querySelector('input[type="checkbox"]');
+                if (cb) cb.checked = false;
+            }
+        });
+    });
+
+    document.getElementById('filter-search-input').addEventListener('input', (e) => {
+        const searchTerm = e.target.value.toLowerCase();
+        document.querySelectorAll('#filter-list-manager li').forEach(li => {
+            const filterName = li.querySelector('span[data-filter-name]').textContent.toLowerCase();
+            li.style.display = filterName.includes(searchTerm) ? 'flex' : 'none';
+        });
+    });
 
     document.getElementById('save-filters-btn').addEventListener('click', () => {
         saveFilterSettings();
