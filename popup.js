@@ -255,7 +255,9 @@ document.addEventListener('DOMContentLoaded', () => {
             statusSpan.textContent = 'Connected';
             statusSpan.style.color = 'green';
             ms365Settings.style.display = 'block';
-            populateSharePointLists();
+            // Populate both list dropdowns
+            populateSharePointLists('#sharepoint-list-select', '#sharepoint-list-status', '/sites/zamowienia', 'selectedSharePointList');
+            populateSharePointLists('#sharepoint-list-select-clv', '#sharepoint-list-status-clv', '/sites/wizja-TabelaSprzeday', 'selectedSharePointListClv');
         } else {
             ms365LoginButton.style.display = 'block';
             ms365LogoutButton.style.display = 'none';
@@ -288,13 +290,17 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    async function populateSharePointLists() {
-        const select = document.getElementById('sharepoint-list-select');
-        const statusDiv = document.getElementById('sharepoint-list-status');
+    async function populateSharePointLists(selectSelector, statusSelector, sitePath, storageKey) {
+        const select = document.querySelector(selectSelector);
+        const statusDiv = document.querySelector(statusSelector);
+        if (!select || !statusDiv) {
+            console.error('Could not find select or status elements for SharePoint lists');
+            return;
+        }
         select.innerHTML = '<option>Loading...</option>';
 
         try {
-            const response = await chrome.runtime.sendMessage({ action: 'get_available_lists' });
+            const response = await chrome.runtime.sendMessage({ action: 'get_available_lists', sitePath: sitePath });
             if (response && response.success) {
                 select.innerHTML = ''; // Clear loading message
                 if (response.lists.length === 0) {
@@ -309,15 +315,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     select.appendChild(option);
                 });
 
-                const settings = await chrome.storage.local.get('selectedSharePointList');
-                if (settings.selectedSharePointList) {
-                    select.value = settings.selectedSharePointList;
+                const settings = await chrome.storage.local.get(storageKey);
+                if (settings[storageKey]) {
+                    select.value = settings[storageKey];
                 }
             } else {
                 throw new Error(response.error || 'Failed to fetch lists.');
             }
         } catch (error) {
-            console.error('Error populating SharePoint lists:', error);
+            console.error(`Error populating SharePoint lists for ${sitePath}:`, error);
             select.innerHTML = '<option>Error loading lists</option>';
             statusDiv.textContent = `Error: ${error.message}`;
             statusDiv.style.color = 'red';
@@ -338,6 +344,24 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         } else {
             // This case might not be necessary if the dropdown only contains valid lists or a disabled default
+            statusDiv.textContent = 'Please select a valid list.';
+            statusDiv.style.color = 'red';
+        }
+    });
+
+    // Event listener for the new CLV list
+    document.getElementById('sharepoint-list-select-clv').addEventListener('change', (event) => {
+        const selectedListId = event.target.value;
+        const statusDiv = document.getElementById('sharepoint-list-status-clv');
+
+        if (selectedListId && selectedListId !== 'Error loading lists' && selectedListId !== 'No lists found') {
+            chrome.storage.local.set({ selectedSharePointListClv: selectedListId }, () => {
+                console.log('CLV SharePoint list selection saved.');
+                statusDiv.textContent = 'Selection saved!';
+                statusDiv.style.color = 'green';
+                setTimeout(() => statusDiv.textContent = '', 3000); // Clear message after 3 seconds
+            });
+        } else {
             statusDiv.textContent = 'Please select a valid list.';
             statusDiv.style.color = 'red';
         }

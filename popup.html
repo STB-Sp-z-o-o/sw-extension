@@ -150,18 +150,25 @@
             <label for="toggle-material-cost-enhancement">Material Cost</label>
             <input type="checkbox" id="toggle-material-cost-enhancement" class="feature-toggle" data-feature="materialCost">
         </div>
-        <button id="save-feature-settings">Save Toggles</button>
-
-        <div id="ms365-settings" style="display: none;">
-            <hr>
-            <h3>SharePoint Integration</h3>
-            <div class="setting-item">
-                <label for="sharepoint-list-select">Select List:</label>
-                <select id="sharepoint-list-select"></select>
-                <button id="save-sharepoint-list">Save</button>
-            </div>
-             <div id="sharepoint-list-status"></div>
+        <div class="setting-item">
+            <label for="toggle-filter-management">Filter Management</label>
+            <input type="checkbox" id="toggle-filter-management" class="feature-toggle" data-feature="filterManagement">
         </div>
+        <div id="ms365-settings" style="display: none;">
+            <h4>SharePoint Settings</h4>
+            <div class="ms365-setting-item">
+                <label for="sharepoint-list-select">List for "Nowa wysyłka":</label>
+                <select id="sharepoint-list-select"></select>
+                <div id="sharepoint-list-status" class="status-message"></div>
+            </div>
+            <div class="ms365-setting-item">
+                <label for="sharepoint-list-select-clv">List for "Zamówienia CLV":</label>
+                <select id="sharepoint-list-select-clv"></select>
+                <div id="sharepoint-list-status-clv" class="status-message"></div>
+            </div>
+        </div>
+
+        <button id="save-feature-settings" class="button">Save Feature Settings</button>
     </div>
 
     <!-- About Tab -->
