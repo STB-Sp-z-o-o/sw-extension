@@ -294,48 +294,49 @@ checkForSpecificModal();
 
 // --- Filter Management --- //
 
+// This will hold the single, permanent observer for the filter container.
+let filterChangeObserver = null;
+let isApplyingSettings = false; // Flag to prevent infinite loops
+
 function initializeFilterManagement() {
     console.log("Initializing Filter Management feature.");
 
-    const observer = new MutationObserver((mutations, obs) => {
+    // We will now directly try to set up the permanent observer.
+    // This simplifies the logic and handles cases where the container
+    // might already be present on script load.
+    observeFilterContainerForChanges();
+}
+
+function setupFilters() {
+    // This function contains the logic that should run once the filter container is found.
+    console.log("Filter container found. Proceeding with setup.");
+
+    // First, ensure all filters have a unique ID. This is crucial for persistence.
+    assignFilterIds();
+
+    // Now, add the button if it's not already there.
+    if (!document.getElementById('manage-filters-btn')) {
+        console.log("Adding 'Manage Filters' button.");
+        const manageButton = document.createElement('button');
+        manageButton.textContent = 'Zarządzaj filtrami';
+        manageButton.id = 'manage-filters-btn';
+        manageButton.className = 'chakra-button css-1wsr4ig';
+        manageButton.style.marginLeft = '15px';
+        manageButton.style.alignSelf = 'center';
+
+        manageButton.addEventListener('click', openFilterManager);
+
         const filtersContainer = document.querySelector('.list__filters-container');
-        if (filtersContainer) {
-            // Once we find the container, we can do our setup and then stop observing.
-            console.log("Filter container found. Proceeding with setup.");
-
-            // First, ensure all filters have a unique ID. This is crucial for persistence.
-            assignFilterIds();
-
-            // Now, add the button if it's not already there.
-            if (!document.getElementById('manage-filters-btn')) {
-                console.log("Adding 'Manage Filters' button.");
-                const manageButton = document.createElement('button');
-                manageButton.textContent = 'Zarządzaj filtrami';
-                manageButton.id = 'manage-filters-btn';
-                manageButton.className = 'chakra-button css-1wsr4ig';
-                manageButton.style.marginLeft = '15px';
-                manageButton.style.alignSelf = 'center';
-
-                manageButton.addEventListener('click', openFilterManager);
-
-                const heading = filtersContainer.querySelector('h2');
-                if (heading) {
-                    heading.insertAdjacentElement('afterend', manageButton);
-                } else {
-                    filtersContainer.prepend(manageButton);
-                }
-            }
-            
-            // Apply settings once.
-            applyFilterSettings();
-
-            // Disconnect the observer to prevent it from running again unnecessarily.
-            obs.disconnect();
-            console.log("Filter setup complete. Observer disconnected.");
+        const heading = filtersContainer ? filtersContainer.querySelector('h2') : null;
+        if (heading) {
+            heading.insertAdjacentElement('afterend', manageButton);
+        } else if (filtersContainer) {
+            filtersContainer.prepend(manageButton);
         }
-    });
-
-    observer.observe(document.body, { childList: true, subtree: true });
+    }
+    
+    // Apply settings once.
+    applyFilterSettings();
 }
 
 function getPageIdentifier() {
@@ -511,10 +512,67 @@ function saveFilterSettings() {
     });
 
     chrome.storage.sync.set({ [pageId]: settings }, () => {
-        console.log('Filter settings saved for', pageId, settings);
-        applyFilterSettings();
+        console.log('Filter settings saved. Reloading page to apply changes.');
+        // Reload the page to apply changes.
+        location.reload();
     });
 }
+
+function observeFilterContainerForChanges() {
+    // If an observer is already running for the filters, don't create another one.
+    if (filterChangeObserver) {
+        // If we are already observing, we can still check if the container exists now
+        // and run setup if it does and hasn't been run.
+        if (document.querySelector('.list__filters-container') && !document.getElementById('manage-filters-btn')) {
+            setupFilters();
+        }
+        return;
+    }
+
+    const targetNode = document.body;
+
+    const observer = new MutationObserver((mutations, obs) => {
+        const reorderableParent = document.querySelector('.list__filters-container');
+        
+        // 1. If the container now exists, run the initial setup and then focus on observing it.
+        if (reorderableParent && !document.getElementById('manage-filters-btn')) {
+            setupFilters();
+            // We can disconnect the body observer and attach a more specific one if needed,
+            // but observing the body for childList changes is generally fine.
+        }
+
+        // 2. Handle dynamic changes (React re-renders)
+        if (reorderableParent) {
+            // If the mutation was caused by our own script, ignore it.
+            if (isApplyingSettings) {
+                return;
+            }
+
+            // Check if nodes were added or removed inside the container.
+            const wasListModified = mutations.some(m => {
+                return (m.type === 'childList' && (m.addedNodes.length > 0 || m.removedNodes.length > 0) && reorderableParent.contains(m.target));
+            });
+
+            if (wasListModified) {
+                console.log("MutationObserver: Detected external change to filter container. Re-applying settings.");
+                
+                // It's crucial to re-assign IDs, as React might have created brand new elements
+                // without our data-filter-id attribute.
+                assignFilterIds(); 
+                
+                // Re-apply the settings to the newly rendered elements.
+                applyFilterSettings();
+            }
+        }
+    });
+
+    observer.observe(targetNode, { childList: true, subtree: true });
+    filterChangeObserver = observer; // Store the created observer.
+    console.log("Permanently observing document body for filter container and its changes.");
+}
+
+// This observer will watch for changes made by React (or other scripts)
+// and re-apply the user's settings if the filter list is overwritten.
 
 function applyFilterSettings() {
     const pageId = getPageIdentifier();
@@ -522,7 +580,7 @@ function applyFilterSettings() {
         const settings = data[pageId];
         if (!settings) {
             console.log("No saved filter settings found for this page. Applying default order.");
-            assignFilterIds();
+            assignFilterIds(); // Still ensure IDs are present for new sessions
             return;
         }
 
@@ -532,7 +590,6 @@ function applyFilterSettings() {
             return;
         }
 
-        // This is the actual element that holds the filters and where we need to append them.
         const reorderableParent = document.querySelector('.list__filters-container');
         if (!reorderableParent) {
             console.error("Could not find the reorderable parent container for filters (.list__filters-container).");
@@ -540,9 +597,16 @@ function applyFilterSettings() {
         }
 
         const elementMap = new Map();
-        filterContainer.querySelectorAll('[data-filter-id]').forEach(el => {
+        const allFilterElements = filterContainer.querySelectorAll('[data-filter-id]');
+        allFilterElements.forEach(el => {
             elementMap.set(el.getAttribute('data-filter-id'), el);
         });
+
+        // Set a flag to prevent the MutationObserver from re-triggering
+        isApplyingSettings = true;
+
+        // Detach all filter elements first to ensure a clean re-append
+        allFilterElements.forEach(el => el.remove());
 
         // Re-append elements to the correct parent in the saved order and set visibility
         settings.forEach(setting => {
@@ -554,6 +618,12 @@ function applyFilterSettings() {
         });
 
         console.log("Applied filter settings.");
+
+        // Reset the flag after a short delay to allow the DOM to settle.
+        // This prevents the observer from ignoring legitimate external changes.
+        setTimeout(() => {
+            isApplyingSettings = false;
+        }, 50); // A small delay is usually sufficient
     });
 }
 
