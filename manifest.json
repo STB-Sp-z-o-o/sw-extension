@@ -31,7 +31,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["lib/xlsx.full.min.js", "js/main.js", "js/commissionPage.js", "js/filterManagement.js", "js/sharepointIntegration.js", "js/ui.js"],
+      "resources": ["lib/xlsx.full.min.js", "js/main.js", "js/commissionPage.js", "js/filterManagement.js", "js/sharepointIntegration.js", "js/ui.js", "js/attributePage.js"],
       "matches": ["https://serwis.stb.tech/*"]
     }
   ]

@@ -4,6 +4,7 @@ console.log("main.js loaded");
 import { initializeCommissionPage } from './commissionPage.js';
 import { initializeFilterManagement } from './filterManagement.js';
 import { initializeSharePointIntegration } from './sharepointIntegration.js';
+import { initializeCredentialsPage, initializeEditPage } from './attributePage.js';
 
 const defaultFeatureSettings = {
     commissionPage: true,
@@ -24,12 +25,12 @@ function initializeFeatures(settings) {
 
     // Logic for attribute credentials page
     if (settings.credentialsPage && window.location.href.includes('https://serwis.stb.tech/commissionAttribute/addAttributeCredentials/commission_attribute_id/')) {
-        // Placeholder for future credentials page logic
+        initializeCredentialsPage();
     }
 
     // Logic for attribute edit page
     if (settings.editPage && window.location.href.includes('https://serwis.stb.tech/commissionAttribute/edit/commission_attribute_id/')) {
-        // Placeholder for future edit page logic
+        initializeEditPage();
     }
 
     // Logic for Filter Management on list pages
