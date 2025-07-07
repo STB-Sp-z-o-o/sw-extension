@@ -15,7 +15,8 @@
   "content_scripts": [
     {
       "matches": ["https://serwis.stb.tech/*"],
-      "js": ["lib/xlsx.full.min.js", "content.js"]
+      "css": ["lib/leaflet.css"],
+      "js": ["lib/xlsx.full.min.js", "lib/leaflet.js", "content.js"]
     }
   ],
   "action": {
@@ -31,7 +32,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["lib/xlsx.full.min.js", "js/main.js", "js/commissionPage.js", "js/filterManagement.js", "js/sharepointIntegration.js", "js/ui.js", "js/attributePage.js"],
+      "resources": ["js/main.js", "js/commissionPage.js", "js/filterManagement.js", "js/sharepointIntegration.js", "js/ui.js", "js/attributePage.js", "js/routePlanner.js", "lib/leaflet.js", "lib/leaflet.css"],
       "matches": ["https://serwis.stb.tech/*"]
     }
   ]

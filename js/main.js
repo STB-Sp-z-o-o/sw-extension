@@ -5,13 +5,15 @@ import { initializeCommissionPage } from './commissionPage.js';
 import { initializeFilterManagement } from './filterManagement.js';
 import { initializeSharePointIntegration } from './sharepointIntegration.js';
 import { initializeCredentialsPage, initializeEditPage } from './attributePage.js';
+import { initializeRoutePlanner } from './routePlanner.js';
 
 const defaultFeatureSettings = {
     commissionPage: true,
     credentialsPage: true,
     editPage: true,
     materialCost: true,
-    filterManagement: true
+    filterManagement: true,
+    routePlanner: true
 };
 
 // This function will hold all the logic that needs to be re-run when settings change.
@@ -21,6 +23,9 @@ function initializeFeatures(settings) {
     // Logic for commission show page
     if (settings.commissionPage && window.location.href.includes('https://serwis.stb.tech/commission/show/commission_id/')) {
         initializeCommissionPage();
+        if (settings.routePlanner) {
+            initializeRoutePlanner();
+        }
     }
 
     // Logic for attribute credentials page
