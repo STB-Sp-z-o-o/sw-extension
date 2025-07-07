@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Extension Test Page</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        h1, h2 { border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 20px; }
+        .container { margin-bottom: 30px; }
+        button { padding: 8px 12px; cursor: pointer; }
+        #sharepoint-modal-container, #filter-modal-container { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; }
+        .modal-content { background: white; padding: 20px; border-radius: 5px; min-width: 400px; }
+    </style>
+</head>
+<body>
+
+    <h1>Extension Refactor Test Page</h1>
+
+    <div class="container">
+        <h2>Commission Page Simulation</h2>
+        <p>Superuser status: <strong id="superuser-status">Unknown</strong></p>
+        <div class="commission__attributes-container">
+            <div id="attribute-123">
+                <label class="chakra-form__label">
+                    <span class="chakra-text">An Attribute</span>
+                </label>
+            </div>
+            <div id="attribute-456">
+                <h4 class="chakra-heading">Another Attribute</h4>
+            </div>
+             <div id="attribute-789">
+                <label class="chakra-form__label"><span><span class="chakra-text">Complex Nested Attribute</span></span></label>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>Filter Management Simulation</h2>
+        <button onclick="document.getElementById('filter-modal-container').style.display = 'flex'">Open Filter Modal</button>
+    </div>
+
+    <div class="container">
+        <h2>SharePoint Integration Simulation</h2>
+        <button onclick="document.getElementById('sharepoint-modal-container').style.display = 'flex'">Open SharePoint Modal</button>
+    </div>
+
+    <!-- Mock Modals -->
+    <div id="filter-modal-container">
+        <div class="modal-content">
+            <h3>Filter Settings</h3>
+            <div id="filter-settings-container"></div>
+            <button id="save-filter-settings">Save</button>
+            <button onclick="document.getElementById('filter-modal-container').style.display = 'none'">Close</button>
+        </div>
+    </div>
+    <div id="sharepoint-modal-container">
+         <div class="modal-content">
+            <h3>SharePoint Integration</h3>
+            <div id="sharepoint-modal-content"></div>
+            <button onclick="document.getElementById('sharepoint-modal-container').style.display = 'none'">Close</button>
+        </div>
+    </div>
+
+
+    <script>
+        // Mock the global user object the scripts expect
+        window.extension_user = {
+            user: {
+                isSuperUser: true
+            }
+        };
+
+        // Update the status display for clarity
+        document.getElementById('superuser-status').textContent = window.extension_user.user.isSuperUser ? 'Active' : 'Inactive';
+    </script>
+
+    <!-- Load the main script -->
+    <script src="./js/main.js" type="module"></script>
+
+</body>
+</html>
