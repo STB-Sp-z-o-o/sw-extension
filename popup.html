@@ -162,13 +162,30 @@
             <h4>SharePoint Settings</h4>
             <div class="ms365-setting-item">
                 <label for="sharepoint-list-select">List for "Nowa wysyłka":</label>
-                <select id="sharepoint-list-select"></select>
+                <select id="sharepoint-list-select" class="form-control"></select>
                 <div id="sharepoint-list-status" class="status-message"></div>
             </div>
             <div class="ms365-setting-item">
+                <label for="sharepoint-site-path-wysylka">SharePoint Site Path for "Nowa wysyłka":</label>
+                <input type="text" id="sharepoint-site-path-wysylka" class="form-control" placeholder="/sites/your-site">
+            </div>
+
+            <hr>
+
+            <h5>CLV Orders Settings</h5>
+            <div class="ms365-setting-item">
                 <label for="sharepoint-list-select-clv">List for "Zamówienia CLV":</label>
-                <select id="sharepoint-list-select-clv"></select>
+                <select id="sharepoint-list-select-clv" class="form-control"></select>
                 <div id="sharepoint-list-status-clv" class="status-message"></div>
+            </div>
+             <div class="ms365-setting-item">
+                <label for="sharepoint-site-path-clv">SharePoint Site Path for "Zamówienia CLV":</label>
+                <input type="text" id="sharepoint-site-path-clv" class="form-control" placeholder="/sites/your-other-site">
+            </div>
+            <div class="ms365-setting-item">
+                <label for="clv-order-column">Column Name for CLV Order Search:</label>
+                <input type="text" id="clv-order-column" class="form-control" placeholder="Internal column name, e.g., Title">
+                <small>Internal name of the column for CLV order number.</small>
             </div>
         </div>
 

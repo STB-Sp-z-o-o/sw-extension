@@ -29,8 +29,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function checkExtensionAuthState() {
         // Check for core extension settings first, then for a login token.
-        // NOTE: Using chrome.storage.local for consistency with where settings were likely saved.
-        chrome.storage.local.get(['extension_settings', 'extension_auth_token'], (data) => {
+        // NOTE: Using chrome.storage.sync for all settings.
+        chrome.storage.sync.get(['extension_settings', 'extension_auth_token'], (data) => {
             if (!data.extension_settings || !data.extension_settings.apiUrl) {
                 showView(initialSetupView);
             } else if (!data.extension_auth_token) {
@@ -48,7 +48,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function displayUserDataFromStorage() {
         try {
             const data = await new Promise((resolve, reject) => {
-                chrome.storage.local.get('extension_user', (result) => {
+                chrome.storage.sync.get('extension_user', (result) => {
                     if (chrome.runtime.lastError) return reject(chrome.runtime.lastError);
                     resolve(result);
                 });
@@ -81,7 +81,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const userData = await response.json();
 
             await new Promise((resolve, reject) => {
-                chrome.storage.local.set({ extension_user: userData }, () => {
+                chrome.storage.sync.set({ extension_user: userData }, () => {
                     if (chrome.runtime.lastError) return reject(chrome.runtime.lastError);
                     console.log('User data fetched and stored.');
                     resolve();
@@ -101,7 +101,7 @@ document.addEventListener('DOMContentLoaded', () => {
             apiUrl: document.getElementById('api_url').value,
         };
         if (settings.apiUrl) { // Simple validation
-            chrome.storage.local.set({ extension_settings: settings }, () => {
+            chrome.storage.sync.set({ extension_settings: settings }, () => {
                 console.log('Extension settings saved.');
                 checkExtensionAuthState(); // Re-check state, should now show login view
             });
@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        chrome.storage.local.get('extension_settings', (data) => {
+        chrome.storage.sync.get('extension_settings', (data) => {
             if (!data.extension_settings || !data.extension_settings.apiUrl || !data.extension_settings.clientId) {
                 console.error('API settings are missing.');
                 // TODO: Show this error on the UI
@@ -158,7 +158,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     await fetchAndStoreUserData(token, apiUrl);
 
                     // Then, save the token and update the view
-                    chrome.storage.local.set({ extension_auth_token: token }, () => {
+                    chrome.storage.sync.set({ extension_auth_token: token }, () => {
                         console.log('Extension login successful.');
                         checkExtensionAuthState(); // Re-check state, should now show main container
                     });
@@ -174,7 +174,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     logoutButton.addEventListener('click', () => {
-        chrome.storage.local.remove(['extension_auth_token', 'extension_user'], () => {
+        chrome.storage.sync.remove(['extension_auth_token', 'extension_user'], () => {
             console.log('Extension logout successful.');
             checkExtensionAuthState(); // Re-check state, should now show login view
         });
@@ -198,34 +198,87 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- Feature Toggles Logic ---
-    function saveFeatureSettings() {
-        const settings = {};
-        document.querySelectorAll('.feature-toggle').forEach(toggle => {
-            const featureName = toggle.dataset.feature;
-            if (featureName) {
-                settings[featureName] = toggle.checked;
-            }
-        });
-        chrome.storage.sync.set({ featureSettings: settings }, () => {
-            console.log('Feature settings saved.');
-            // Optionally, show a confirmation message
-        });
-    }
+    const featureToggles = document.querySelectorAll('.feature-toggle');
+    const clvOrderColumnInput = document.getElementById('clv-order-column');
+    const wysylkaSitePathInput = document.getElementById('sharepoint-site-path-wysylka');
+    const clvSitePathInput = document.getElementById('sharepoint-site-path-clv');
 
     function loadFeatureSettings() {
-        chrome.storage.sync.get('featureSettings', (data) => {
-            if (data.featureSettings) {
-                document.querySelectorAll('.feature-toggle').forEach(toggle => {
-                    const featureName = toggle.dataset.feature;
-                    if (featureName && data.featureSettings.hasOwnProperty(featureName)) {
-                        toggle.checked = data.featureSettings[featureName];
-                    }
+        const features = Array.from(featureToggles).map(toggle => toggle.dataset.feature);
+        const keysToGet = [
+            'feature_settings', 
+            'selectedSharePointList', 
+            'selectedSharePointListClv', 
+            'sharepointClvOrderColumn',
+            'sharepointSitePathWysylka',
+            'sharepointSitePathClv'
+        ];
+
+        chrome.storage.sync.get(keysToGet, (data) => {
+            if (data.feature_settings) {
+                featureToggles.forEach(toggle => {
+                    toggle.checked = !!data.feature_settings[toggle.dataset.feature];
                 });
+            }
+            if (data.selectedSharePointList) {
+                document.getElementById('sharepoint-list-select').value = data.selectedSharePointList;
+            }
+            if (data.selectedSharePointListClv) {
+                document.getElementById('sharepoint-list-select-clv').value = data.selectedSharePointListClv;
+            }
+            if (data.sharepointClvOrderColumn) {
+                clvOrderColumnInput.value = data.sharepointClvOrderColumn;
+            }
+            if (data.sharepointSitePathWysylka) {
+                wysylkaSitePathInput.value = data.sharepointSitePathWysylka;
+            }
+            if (data.sharepointSitePathClv) {
+                clvSitePathInput.value = data.sharepointSitePathClv;
             }
         });
     }
 
+    function saveFeatureSettings() {
+        const settings = {};
+        featureToggles.forEach(toggle => {
+            settings[toggle.dataset.feature] = toggle.checked;
+        });
+        chrome.storage.sync.set({ feature_settings: settings }, () => {
+            console.log('Feature settings saved.');
+            // Optional: show a confirmation message
+        });
+    }
+
+    // Save toggles when the button is clicked
     saveFeatureSettingsButton.addEventListener('click', saveFeatureSettings);
+
+    // Save CLV order column on input change
+    clvOrderColumnInput.addEventListener('input', () => {
+        const columnName = clvOrderColumnInput.value.trim();
+        chrome.storage.sync.set({ sharepointClvOrderColumn: columnName }, () => {
+            console.log(`CLV order column name saved: ${columnName}`);
+        });
+    });
+
+    wysylkaSitePathInput.addEventListener('input', () => {
+        let sitePath = wysylkaSitePathInput.value.trim();
+        if (sitePath && !sitePath.startsWith('/')) {
+            sitePath = '/' + sitePath;
+        }
+        chrome.storage.sync.set({ sharepointSitePathWysylka: sitePath }, () => {
+            console.log(`Wysyłka site path saved: ${sitePath}`);
+        });
+    });
+
+    clvSitePathInput.addEventListener('input', () => {
+        let sitePath = clvSitePathInput.value.trim();
+        if (sitePath && !sitePath.startsWith('/')) {
+            sitePath = '/' + sitePath;
+        }
+        chrome.storage.sync.set({ sharepointSitePathClv: sitePath }, () => {
+            console.log(`CLV site path saved: ${sitePath}`);
+        });
+    });
 
     // --- MS365 & SharePoint Logic ---
     async function checkLoginStatus() {
@@ -255,9 +308,24 @@ document.addEventListener('DOMContentLoaded', () => {
             statusSpan.textContent = 'Connected';
             statusSpan.style.color = 'green';
             ms365Settings.style.display = 'block';
-            // Populate both list dropdowns
-            populateSharePointLists('#sharepoint-list-select', '#sharepoint-list-status', '/sites/zamowienia', 'selectedSharePointList');
-            populateSharePointLists('#sharepoint-list-select-clv', '#sharepoint-list-status-clv', '/sites/wizja-TabelaSprzeday', 'selectedSharePointListClv');
+
+            // Get settings to pass the correct site paths
+            chrome.storage.sync.get(['sharepointSitePathWysylka', 'sharepointSitePathClv'], (settings) => {
+                const wysylkaSitePath = settings.sharepointSitePathWysylka;
+                const clvSitePath = settings.sharepointSitePathClv;
+
+                if (wysylkaSitePath) {
+                    populateSharePointLists('#sharepoint-list-select', '#sharepoint-list-status', wysylkaSitePath, 'selectedSharePointList');
+                } else {
+                    document.querySelector('#sharepoint-list-select').innerHTML = '<option>Set Site Path first</option>';
+                }
+
+                if (clvSitePath) {
+                    populateSharePointLists('#sharepoint-list-select-clv', '#sharepoint-list-status-clv', clvSitePath, 'selectedSharePointListClv');
+                } else {
+                    document.querySelector('#sharepoint-list-select-clv').innerHTML = '<option>Set Site Path first</option>';
+                }
+            });
         } else {
             ms365LoginButton.style.display = 'block';
             ms365LogoutButton.style.display = 'none';
@@ -315,7 +383,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     select.appendChild(option);
                 });
 
-                const settings = await chrome.storage.local.get(storageKey);
+                // NOTE: All settings are now in sync. This was previously local.
+                const settings = await chrome.storage.sync.get(storageKey);
                 if (settings[storageKey]) {
                     select.value = settings[storageKey];
                 }
@@ -336,33 +405,30 @@ document.addEventListener('DOMContentLoaded', () => {
         const statusDiv = document.getElementById('sharepoint-list-status');
 
         if (selectedListId && selectedListId !== 'Error loading lists' && selectedListId !== 'No lists found') {
-            chrome.storage.local.set({ selectedSharePointList: selectedListId }, () => {
-                console.log('SharePoint list selection saved.');
-                statusDiv.textContent = 'Selection saved!';
+            chrome.storage.sync.set({ selectedSharePointList: selectedListId }, () => {
+                statusDiv.textContent = 'List saved!';
                 statusDiv.style.color = 'green';
-                setTimeout(() => statusDiv.textContent = '', 3000); // Clear message after 3 seconds
+                setTimeout(() => statusDiv.textContent = '', 2000);
             });
         } else {
-            // This case might not be necessary if the dropdown only contains valid lists or a disabled default
-            statusDiv.textContent = 'Please select a valid list.';
+            statusDiv.textContent = 'Invalid selection.';
             statusDiv.style.color = 'red';
         }
     });
 
-    // Event listener for the new CLV list
+    // Event listener to save the CLV SharePoint list on selection change
     document.getElementById('sharepoint-list-select-clv').addEventListener('change', (event) => {
         const selectedListId = event.target.value;
         const statusDiv = document.getElementById('sharepoint-list-status-clv');
 
         if (selectedListId && selectedListId !== 'Error loading lists' && selectedListId !== 'No lists found') {
-            chrome.storage.local.set({ selectedSharePointListClv: selectedListId }, () => {
-                console.log('CLV SharePoint list selection saved.');
-                statusDiv.textContent = 'Selection saved!';
+            chrome.storage.sync.set({ selectedSharePointListClv: selectedListId }, () => {
+                statusDiv.textContent = 'List saved!';
                 statusDiv.style.color = 'green';
-                setTimeout(() => statusDiv.textContent = '', 3000); // Clear message after 3 seconds
+                setTimeout(() => statusDiv.textContent = '', 2000);
             });
         } else {
-            statusDiv.textContent = 'Please select a valid list.';
+            statusDiv.textContent = 'Invalid selection.';
             statusDiv.style.color = 'red';
         }
     });
@@ -374,7 +440,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const statusDiv = document.getElementById('sharepoint-list-status');
 
         if (selectedListId && selectedListId !== 'Error loading lists' && selectedListId !== 'No lists found') {
-            chrome.storage.local.set({ selectedSharePointList: selectedListId }, () => {
+            chrome.storage.sync.set({ selectedSharePointList: selectedListId }, () => {
                 console.log('SharePoint list selection saved.');
                 statusDiv.textContent = 'Selection saved!';
                 statusDiv.style.color = 'green';

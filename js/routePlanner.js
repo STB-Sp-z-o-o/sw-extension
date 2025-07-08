@@ -126,6 +126,40 @@ async function displayMap(containerId, startCoords, endCoords, startAddress, end
     setTimeout(() => map.invalidateSize(), 100);
 }
 
+// This function will now be the core logic, callable whenever the address changes.
+async function runRouteCalculation(startAddress) {
+    const endAddressElement = document.querySelector('#commission__address .select__single-value__label');
+    const mapContent = document.getElementById('map-content');
+    const startAddressDisplay = document.getElementById('start-address-display');
+    const etaValue = document.getElementById('eta-value');
+
+    if (startAddressDisplay) {
+        startAddressDisplay.textContent = startAddress || 'Brak adresu początkowego.';
+    }
+
+    if (endAddressElement && endAddressElement.textContent.trim() && startAddress) {
+        // Clean the address by removing text in parentheses and street prefixes
+        const cleanedEndAddress = endAddressElement.textContent
+            .trim()
+            .replace(/\s*\([^)]*\)/g, '')
+            .replace(/^ul\.\s*/, '');
+
+        mapContent.innerHTML = '<p>Geokodowanie adresów...</p>';
+        etaValue.textContent = 'obliczanie...';
+        const startCoords = await geocodeAddress(startAddress);
+        const endCoords = await geocodeAddress(cleanedEndAddress);
+
+        if (startCoords && endCoords) {
+            await displayMap('map-content', startCoords, endCoords, startAddress, cleanedEndAddress);
+        } else {
+            mapContent.innerHTML = '<p style="color: red;">Błąd: Nie można było znaleźć współrzędnych dla jednego z adresów.</p>';
+            etaValue.textContent = 'Błąd';
+        }
+    } else {
+        mapContent.innerHTML = '<p>Nie znaleziono adresu początkowego lub końcowego.</p>';
+        etaValue.textContent = 'Brak danych';
+    }
+}
 
 // Main function to initialize the route planner feature
 export function initializeRoutePlanner() {
@@ -135,25 +169,22 @@ export function initializeRoutePlanner() {
             return;
         }
 
-        const observer = new MutationObserver(async (mutations, obs) => {
+        const pageObserver = new MutationObserver(async (mutations, obs) => {
             const docSeriesElement = document.querySelector('.commission__document-series .select__single-value__label');
             const detailsContainer = document.querySelector('.commission__details');
             const endAddressElement = document.querySelector('#commission__address .select__single-value__label');
 
-            // Wait for the "Montaż" series, the details container, and the commission address to be present.
             if (docSeriesElement && docSeriesElement.textContent.trim() === 'Montaż' && detailsContainer && endAddressElement && endAddressElement.textContent.trim()) {
-                console.log("'Montaż' commission and address detected. Initializing route planner.");
-                
-                // Prevent re-initialization
+                console.log("'Montaż' commission and address detected. Initializing route planner UI.");
+
                 if (document.getElementById('route-planner-container')) {
                     obs.disconnect();
                     return;
                 }
 
-                // Leaflet is now loaded via manifest.json, so no injection is needed.
                 const routePlannerContainer = document.createElement('div');
                 routePlannerContainer.id = 'route-planner-container';
-                routePlannerContainer.className = 'css-l7va25'; // Match styling of other sections
+                routePlannerContainer.className = 'css-l7va25';
                 routePlannerContainer.style.marginTop = '20px';
                 routePlannerContainer.innerHTML = `
                     <div class="chakra-stack css-1fv6v2f">
@@ -162,9 +193,8 @@ export function initializeRoutePlanner() {
                         </div>
                     </div>
                     <div class="chakra-stack css-9d72bo" style="margin-top: 10px;">
-                        <label for="start-address-input" class="chakra-form__label">Adres początkowy:</label>
-                        <input id="start-address-input" class="chakra-input" placeholder="Wpisz adres początkowy" value="Bielany Wrocławskie, Polska">
-                        <button id="recalculate-route-btn" class="chakra-button css-14aipv" style="margin-top: 5px;">Przelicz trasę</button>
+                        <p class="chakra-form__label"><strong>Adres początkowy (z atrybutu):</strong></p>
+                        <p id="start-address-display" class="chakra-text">Oczekiwanie na atrybut...</p>
                     </div>
                     <div id="map-content" class="">
                         <p>Ładowanie mapy...</p>
@@ -173,49 +203,35 @@ export function initializeRoutePlanner() {
                         <p><strong>Szacowany czas dojazdu (ETA):</strong> <span id="eta-value">wkrótce...</span></p>
                     </div>
                 `;
-                
-                // Prepend to the top of the details container
                 detailsContainer.prepend(routePlannerContainer);
-
-                const recalculateBtn = document.getElementById('recalculate-route-btn');
-                recalculateBtn.addEventListener('click', runRouteCalculation);
-
-                async function runRouteCalculation() {
-                    const startAddress = document.getElementById('start-address-input').value;
-                    const endAddressElement = document.querySelector('#commission__address .select__single-value__label');
-                    const mapContent = document.getElementById('map-content');
-
-                    if (endAddressElement && startAddress) {
-                        // Clean the address by removing text in parentheses and street prefixes
-                        const cleanedEndAddress = endAddressElement.textContent
-                            .trim()
-                            .replace(/\s*\([^)]*\)/g, '') // Corrected regex for parentheses
-                            .replace(/^ul\.\s*/, '');   // Corrected regex for "ul. " prefix
-
-                        mapContent.innerHTML = '<p>Geokodowanie adresów...</p>';
-                        const startCoords = await geocodeAddress(startAddress);
-                        const endCoords = await geocodeAddress(cleanedEndAddress);
-
-                        if (startCoords && endCoords) {
-                            // Call displayMap directly. No need for page context injection.
-                            await displayMap('map-content', startCoords, endCoords, startAddress, cleanedEndAddress);
-                        } else {
-                            mapContent.innerHTML = '<p style="color: red;">Błąd: Nie można było znaleźć współrzędnych dla jednego z adresów.</p>';
-                            document.getElementById('eta-value').textContent = 'Błąd';
-                        }
-                    } else {
-                        mapContent.innerHTML = '<p>Nie znaleziono adresu początkowego lub końcowego.</p>';
-                    }
-                }
                 
-                // Initial calculation
-                await runRouteCalculation();
+                // Now that the UI is in place, start observing for the attribute textarea
+                const attributeObserver = new MutationObserver((attributeMutations, attrObs) => {
+                    const startAddressTextarea = document.querySelector('textarea[id*="475"]');
+                    if (startAddressTextarea) {
+                        console.log("Start address textarea found. Performing initial route calculation.");
+                        
+                        // Perform the route calculation only once when the textarea is found.
+                        const initialStartAddress = startAddressTextarea.value.trim();
+                        if (initialStartAddress) {
+                            runRouteCalculation(initialStartAddress);
+                        } else {
+                             document.getElementById('start-address-display').textContent = "Atrybut jest pusty.";
+                        }
 
-                // Disconnect the observer once we've added the elements
+                        // Disconnect the observer that was looking for the textarea itself, as we don't need to watch for changes.
+                        attrObs.disconnect();
+                    }
+                });
+
+                // Start observing the whole document for the textarea to appear.
+                attributeObserver.observe(document.body, { childList: true, subtree: true });
+
+                // Disconnect the observer that was looking for the commission page elements.
                 obs.disconnect();
             }
         });
 
-        observer.observe(document.body, { childList: true, subtree: true });
+        pageObserver.observe(document.body, { childList: true, subtree: true });
     });
 }

@@ -48,17 +48,56 @@ function initializeFeatures(settings) {
     initializeSharePointIntegration();
 }
 
-// --- Listener for settings changes ---
+// --- Listener for SharePoint Search ---
+window.addEventListener('PerformSharePointSearch', (event) => {
+    const { query } = event.detail;
+    console.log(`main.js: Caught PerformSharePointSearch event with query: ${query}`);
 
-chrome.storage.onChanged.addListener((changes, namespace) => {
-    if (namespace === 'sync' && changes.featureSettings) {
-        console.log('Detected a change in feature settings.');
-        const newSettings = changes.featureSettings.newValue;
-        // We might need to clear or reset existing modifications before re-initializing
-        // For now, we'll just re-run the initialization.
-        initializeFeatures(newSettings);
-    }
+    // Get the appropriate list ID and site path from sync storage
+    chrome.storage.sync.get(['selectedSharePointList', 'sharepointSitePathWysylka'], (settings) => {
+        const { selectedSharePointList, sharepointSitePathWysylka } = settings;
+
+        if (!selectedSharePointList) {
+            console.error('SharePoint list for "Nowa wysyłka" is not configured.');
+            window.dispatchEvent(new CustomEvent('SharePointSearchResults', {
+                detail: { success: false, error: 'Lista SharePoint dla "Nowa wysyłka" nie jest skonfigurowana.' }
+            }));
+            return;
+        }
+
+        if (!sharepointSitePathWysylka) {
+            console.error('SharePoint site path for "Nowa wysyłka" is not configured.');
+            window.dispatchEvent(new CustomEvent('SharePointSearchResults', {
+                detail: { success: false, error: 'Ścieżka witryny SharePoint dla "Nowa wysyłka" nie jest skonfigurowana.' }
+            }));
+            return;
+        }
+
+        // Send message to background script to perform the search
+        chrome.runtime.sendMessage({
+            action: 'search_sharepoint',
+            params: {
+                listId: selectedSharePointList,
+                query: query,
+                sitePath: sharepointSitePathWysylka
+            }
+        }, (response) => {
+            if (chrome.runtime.lastError) {
+                console.error('Error sending message to background script:', chrome.runtime.lastError);
+                window.dispatchEvent(new CustomEvent('SharePointSearchResults', {
+                    detail: { success: false, error: chrome.runtime.lastError.message }
+                }));
+                return;
+            }
+            // Dispatch results back to the content script
+            console.log('main.js: Received response from background script, dispatching SharePointSearchResults.', response);
+            window.dispatchEvent(new CustomEvent('SharePointSearchResults', { detail: response }));
+        });
+    });
 });
+
+// --- Listener for settings changes ---
+let settingsListenerAdded = false;
 
 // --- Initial Run ---
 
@@ -66,6 +105,20 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
 function runWithSettings() {
     chrome.storage.sync.get({ featureSettings: defaultFeatureSettings }, (data) => {
         initializeFeatures(data.featureSettings);
+
+        // Add the settings listener only once, after we know chrome.storage is available.
+        if (!settingsListenerAdded) {
+            chrome.storage.onChanged.addListener((changes, namespace) => {
+                if (namespace === 'sync' && changes.featureSettings) {
+                    console.log('Detected a change in feature settings.');
+                    const newSettings = changes.featureSettings.newValue;
+                    // We might need to clear or reset existing modifications before re-initializing
+                    // For now, we'll just re-run the initialization.
+                    initializeFeatures(newSettings);
+                }
+            });
+            settingsListenerAdded = true;
+        }
     });
 }
 

@@ -6,12 +6,11 @@ let fetchWithAuth;
 export function initializeCommissionPage() {
     console.log("Commission page detected. Checking user status.");
 
-    // Promisify chrome.storage.get for both local and sync
-    const getFromLocalStorage = (keys) => new Promise(resolve => chrome.storage.local.get(keys, resolve));
+    // Promisify chrome.storage.get for sync storage
     const getFromSyncStorage = (keys) => new Promise(resolve => chrome.storage.sync.get(keys, resolve));
 
     // First, check if the user is a superuser
-    getFromLocalStorage(['extension_user']).then(storageData => {
+    getFromSyncStorage(['extension_user']).then(storageData => {
         // Corrected the path to isSuperUser
         if (storageData.extension_user && storageData.extension_user.user && storageData.extension_user.user.isSuperUser) {
             console.log("Superuser detected. Initializing attribute features.");
@@ -45,10 +44,10 @@ export function initializeCommissionPage() {
 
     // Define a fetch wrapper that includes the auth token
     fetchWithAuth = async (url, options = {}) => {
-        const { extension_auth_token, extension_settings } = await getFromLocalStorage(['extension_auth_token', 'extension_settings']);
+        const { extension_auth_token, extension_settings } = await getFromSyncStorage(['extension_auth_token', 'extension_settings']);
 
         if (!extension_auth_token || !extension_settings || !extension_settings.apiUrl) {
-            console.error('Authentication token or API URL not found in local storage.');
+            console.error('Authentication token or API URL not found in sync storage.');
             return Promise.reject('No auth token or API URL');
         }
 
