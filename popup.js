@@ -48,13 +48,13 @@ document.addEventListener('DOMContentLoaded', () => {
     async function displayUserDataFromStorage() {
         try {
             const data = await new Promise((resolve, reject) => {
-                chrome.storage.sync.get('extension_user', (result) => {
+                chrome.storage.local.get('extension_user', (result) => {
                     if (chrome.runtime.lastError) return reject(chrome.runtime.lastError);
                     resolve(result);
                 });
             });
 
-            if (data.extension_user && data.extension_user.user.username) {
+            if (data.extension_user && data.extension_user.user && data.extension_user.user.username) {
                 document.getElementById('loggedInUser').textContent = data.extension_user.user.username;
             } else {
                 document.getElementById('loggedInUser').textContent = 'N/A';
@@ -81,7 +81,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const userData = await response.json();
 
             await new Promise((resolve, reject) => {
-                chrome.storage.sync.set({ extension_user: userData }, () => {
+                chrome.storage.local.set({ extension_user: userData }, () => {
                     if (chrome.runtime.lastError) return reject(chrome.runtime.lastError);
                     console.log('User data fetched and stored.');
                     resolve();
@@ -94,41 +94,80 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Core Extension Auth Logic ---
-    saveSettingsButton.addEventListener('click', () => {
-        const settings = {
-            clientId: document.getElementById('client_id').value,
-            authToken: document.getElementById('auth_token').value,
-            apiUrl: document.getElementById('api_url').value,
-        };
-        if (settings.apiUrl) { // Simple validation
-            chrome.storage.sync.set({ extension_settings: settings }, () => {
-                console.log('Extension settings saved.');
-                checkExtensionAuthState(); // Re-check state, should now show login view
-            });
-        } else {
-            // Optional: show an error to the user
-            console.error('API URL is required.');
+    if (saveSettingsButton) {
+        saveSettingsButton.addEventListener('click', () => {
+            console.log('Save settings button clicked');
+            const settings = {
+                clientId: document.getElementById('client_id').value,
+                authToken: document.getElementById('auth_token').value,
+                apiUrl: document.getElementById('api_url').value,
+            };
+            if (settings.apiUrl) {
+                chrome.storage.sync.set({ extension_settings: settings }, () => {
+                    console.log('Extension settings saved.');
+                    checkExtensionAuthState();
+                });
+            } else {
+                // Show error in UI
+                let errorDiv = document.getElementById('settings-error');
+                if (!errorDiv) {
+                    errorDiv = document.createElement('div');
+                    errorDiv.id = 'settings-error';
+                    errorDiv.style.color = 'red';
+                    errorDiv.style.marginTop = '10px';
+                    initialSetupView.appendChild(errorDiv);
+                }
+                errorDiv.textContent = 'API URL is required.';
+            }
+        });
+    } else {
+        console.error('Save settings button (#save_settings) not found in DOM.');
+        let errorDiv = document.getElementById('settings-error');
+        if (!errorDiv && initialSetupView) {
+            errorDiv = document.createElement('div');
+            errorDiv.id = 'settings-error';
+            errorDiv.style.color = 'red';
+            errorDiv.style.marginTop = '10px';
+            initialSetupView.appendChild(errorDiv);
         }
-    });
+        if (errorDiv) errorDiv.textContent = 'Błąd: przycisk zapisu ustawień nie został znaleziony.';
+    }
 
     loginButton.addEventListener('click', () => {
         const username = document.getElementById('username').value;
         const password = document.getElementById('password').value;
 
+        // Clear previous error
+        let errorDiv = document.getElementById('login-error');
+        if (errorDiv) errorDiv.textContent = '';
+
         if (!username || !password) {
-            console.error('Username and password are required.');
-            // TODO: Show this error on the UI
+            if (!errorDiv && loginView) {
+                errorDiv = document.createElement('div');
+                errorDiv.id = 'login-error';
+                errorDiv.style.color = 'red';
+                errorDiv.style.marginTop = '10px';
+                loginView.appendChild(errorDiv);
+            }
+            if (errorDiv) errorDiv.textContent = 'Podaj nazwę użytkownika i hasło.';
             return;
         }
 
         chrome.storage.sync.get('extension_settings', (data) => {
             if (!data.extension_settings || !data.extension_settings.apiUrl || !data.extension_settings.clientId) {
-                console.error('API settings are missing.');
-                // TODO: Show this error on the UI
+                if (!errorDiv && loginView) {
+                    errorDiv = document.createElement('div');
+                    errorDiv.id = 'login-error';
+                    errorDiv.style.color = 'red';
+                    errorDiv.style.marginTop = '10px';
+                    loginView.appendChild(errorDiv);
+                }
+                if (errorDiv) errorDiv.textContent = 'Brak ustawień API lub ClientId.';
                 return;
             }
 
             const { apiUrl, clientId, authToken } = data.extension_settings;
+            console.log('Attempting to log in with settings:', { apiUrl, clientId, authToken, username });
             const loginUrl = `${apiUrl}/_/security/login`;
 
             const loginPayload = {
@@ -145,22 +184,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 },
                 body: JSON.stringify(loginPayload),
             })
-            .then(response => {
+            .then(async response => {
                 if (!response.ok) {
-                    return response.json().then(err => { throw new Error(err.message || err.error_description || `HTTP error! status: ${response.status}`) });
+                    let errText = await response.text();
+                    let errJson;
+                    try { errJson = JSON.parse(errText); } catch { errJson = {}; }
+                    throw new Error(errJson.message || errJson.error_description || errText || `HTTP error! status: ${response.status}`);
                 }
                 return response.json();
             })
-            .then(async (tokenData) => { // Made this async to await the user fetch
+            .then(async (tokenData) => {
                 const token = tokenData.token || tokenData.access_token;
                 if (token) {
-                    // First, fetch and store the user data
                     await fetchAndStoreUserData(token, apiUrl);
-
-                    // Then, save the token and update the view
-                    chrome.storage.sync.set({ extension_auth_token: token }, () => {
-                        console.log('Extension login successful.');
-                        checkExtensionAuthState(); // Re-check state, should now show main container
+                    chrome.storage.sync.remove('extension_user', () => {
+                        chrome.storage.sync.set({ extension_auth_token: token }, () => {
+                            console.log('Extension login successful.');
+                            checkExtensionAuthState();
+                        });
                     });
                 } else {
                     throw new Error('Authentication token not found in response.');
@@ -168,15 +209,27 @@ document.addEventListener('DOMContentLoaded', () => {
             })
             .catch(error => {
                 console.error('Login error:', error);
-                // TODO: Display a user-friendly error message in the popup
+                if (!errorDiv && loginView) {
+                    errorDiv = document.createElement('div');
+                    errorDiv.id = 'login-error';
+                    errorDiv.style.color = 'red';
+                    errorDiv.style.marginTop = '10px';
+                    loginView.appendChild(errorDiv);
+                }
+                if (errorDiv) {
+                    errorDiv.textContent = 'Błąd logowania: ' + (error.message || error);
+                }
             });
         });
     });
 
     logoutButton.addEventListener('click', () => {
+        // Remove user data from both storages
         chrome.storage.sync.remove(['extension_auth_token', 'extension_user'], () => {
-            console.log('Extension logout successful.');
-            checkExtensionAuthState(); // Re-check state, should now show login view
+            chrome.storage.local.remove('extension_user', () => {
+                console.log('Extension logout successful.');
+                checkExtensionAuthState(); // Re-check state, should now show login view
+            });
         });
     });
 

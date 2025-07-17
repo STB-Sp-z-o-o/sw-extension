@@ -251,3 +251,115 @@ export function initializeEditPage() {
         subtree: true
     });
 }
+
+// --- Auto-fill and filter checklist on commission detail page ---
+function autoFillAndFilterChecklist() {
+    // Only run once
+    if (window.__checklistAutoFilled) return;
+    window.__checklistAutoFilled = true;
+
+    // Check document series and phase
+    const docSeriesSpan = document.querySelector('.commission__document-series .select__single-value__label');
+    const phaseSpan = document.querySelector('.commission__phase .select__single-value__label');
+    if (!docSeriesSpan || !phaseSpan) return;
+    const docSeries = docSeriesSpan.textContent.trim();
+    const phase = phaseSpan.textContent.trim();
+    if (docSeries !== 'Montaż' || phase !== 'Montaż - Kompletacja') return;
+
+    // Get used products and their quantities
+    const usedProductsTable = document.querySelector('.used-materials__table');
+    if (!usedProductsTable) return;
+    const usedProducts = [];
+    usedProductsTable.querySelectorAll('tbody tr').forEach(tr => {
+        const nameCell = tr.cells[0];
+        const qtyCell = tr.cells[1];
+        if (nameCell && qtyCell) {
+            // Extract product name and code from text (e.g. "CLV-Guard-2CAM (CLV-GUARD-2CAM)")
+            const txt = nameCell.textContent.trim();
+            const match = txt.match(/(.+?)\s*\(([^)]+)\)/);
+            if (match) {
+                usedProducts.push({
+                    name: match[1].trim(),
+                    code: match[2].trim(),
+                    qty: parseInt(qtyCell.textContent.replace(/\D/g, ''), 10) || 1
+                });
+            }
+        }
+    });
+    if (!usedProducts.length) return;
+
+    // Parse recipe table
+    const recipeTable = document.querySelector('#attribute-548 table');
+    if (!recipeTable) return;
+    // Map: product code -> [{name, code, qty}]
+    const recipeMap = {};
+    let currentSet = null;
+    recipeTable.querySelectorAll('tbody tr').forEach(tr => {
+        if (tr.children.length === 1) {
+            // Set header row
+            currentSet = tr.textContent.trim();
+        } else if (tr.children.length === 4 && currentSet) {
+            const prodName = tr.children[1].textContent.trim();
+            const prodCode = tr.children[2].textContent.trim();
+            const prodQty = parseInt(tr.children[3].textContent.replace(/\D/g, ''), 10) || 1;
+            if (!recipeMap[currentSet]) recipeMap[currentSet] = [];
+            recipeMap[currentSet].push({ name: prodName, code: prodCode, qty: prodQty });
+        }
+    });
+
+    // Calculate needed components
+    const neededComponents = {};
+    usedProducts.forEach(prod => {
+        const set = recipeMap[prod.name] || recipeMap[prod.code];
+        if (set) {
+            set.forEach(comp => {
+                if (!neededComponents[comp.code]) {
+                    neededComponents[comp.code] = { name: comp.name, code: comp.code, qty: 0 };
+                }
+                neededComponents[comp.code].qty += comp.qty * prod.qty;
+            });
+        }
+    });
+
+    // Filter and fill checklist
+    const checklistTable = document.querySelector('#attribute-523 .attribute-checklist__table');
+    if (!checklistTable) return;
+    checklistTable.querySelectorAll('tbody tr').forEach(tr => {
+        const labelCell = tr.querySelector('td.css-1dpfuy6');
+        const textarea = tr.querySelector('textarea');
+        if (labelCell && textarea) {
+            // Extract code from label (e.g. "Monitor 7” FHD (M001)")
+            const labelTxt = labelCell.textContent;
+            const codeMatch = labelTxt.match(/\(([^)]+)\)/);
+            const code = codeMatch ? codeMatch[1].trim() : null;
+            if (code && neededComponents[code]) {
+                // Fill quantity
+                textarea.value = `Ilość: ${neededComponents[code].qty}`;
+                tr.style.display = '';
+            } else {
+                tr.style.display = 'none';
+            }
+        }
+    });
+
+    // Add button to show all checklist items
+    const checklistContainer = document.querySelector('#attribute-523');
+    if (checklistContainer && !document.getElementById('show-all-checklist-btn')) {
+        const btn = document.createElement('button');
+        btn.id = 'show-all-checklist-btn';
+        btn.textContent = 'Pokaż wszystkie komponenty';
+        btn.className = 'btn btn-secondary btn-sm';
+        btn.style.marginBottom = '10px';
+        btn.onclick = () => {
+            checklistTable.querySelectorAll('tbody tr').forEach(tr => {
+                tr.style.display = '';
+            });
+        };
+        checklistContainer.insertBefore(btn, checklistTable);
+    }
+}
+
+// Run on page load (after DOMContentLoaded)
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(autoFillAndFilterChecklist, 500); // Delay to allow dynamic content
+});

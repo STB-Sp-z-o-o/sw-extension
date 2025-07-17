@@ -4,14 +4,214 @@ let fetchWithAuth;
 
 // Encapsulate all commission page logic into a single function
 export function initializeCommissionPage() {
+    // --- Checklist filter and auto-fill logic ---
+    function filterAndFillChecklist() {
+        console.log('[Checklist] filterAndFillChecklist() called');
+        // Get used products and their quantities
+        const usedProductsTable = document.querySelector('.used-materials__table');
+        console.log('[Checklist] .used-materials__table:', usedProductsTable);
+        if (!usedProductsTable) {
+            console.log('[Checklist] Used products table not found.');
+            return;
+        }
+        const usedProducts = [];
+        usedProductsTable.querySelectorAll('tbody tr').forEach(tr => {
+            const nameCell = tr.cells[0];
+            const qtyCell = tr.cells[1];
+            if (nameCell && qtyCell) {
+                // Extract product name and code from text (e.g. "CLV-Guard-2CAM (CLV-GUARD-2CAM)")
+                const txt = nameCell.textContent.trim();
+                const match = txt.match(/(.+?)\s*\(([^)]+)\)/);
+                if (match) {
+                    usedProducts.push({
+                        name: match[1].trim(),
+                        code: match[2].trim(),
+                        qty: parseInt(qtyCell.textContent.replace(/\D/g, ''), 10) || 1
+                    });
+                }
+            }
+        });
+        console.log('[Checklist] Used products:', usedProducts);
+        if (!usedProducts.length) {
+            console.log('[Checklist] No used products found.');
+            return;
+        }
+
+        // Parse recipe table
+        const recipeTable = document.querySelector('#attribute-548 table');
+        console.log('[Checklist] #attribute-548 table:', recipeTable);
+        if (!recipeTable) {
+            console.log('[Checklist] Recipe table not found.');
+            return;
+        }
+        // Map: product code -> [{name, code, qty}]
+        const recipeMap = {};
+        let currentSet = null;
+        recipeTable.querySelectorAll('tbody tr').forEach(tr => {
+            if (tr.children.length === 1) {
+                // Set header row
+                currentSet = tr.textContent.trim();
+            } else if (tr.children.length === 4 && currentSet) {
+                const prodName = tr.children[1].textContent.trim();
+                const prodCode = tr.children[2].textContent.trim();
+                const prodQty = parseInt(tr.children[3].textContent.replace(/\D/g, ''), 10) || 1;
+                if (!recipeMap[currentSet]) recipeMap[currentSet] = [];
+                recipeMap[currentSet].push({ name: prodName, code: prodCode, qty: prodQty });
+            }
+        });
+        console.log('[Checklist] Recipe map:', recipeMap);
+
+        // Calculate needed components
+        const neededComponents = {};
+        usedProducts.forEach(prod => {
+            const set = recipeMap[prod.name] || recipeMap[prod.code];
+            if (set) {
+                set.forEach(comp => {
+                    if (!neededComponents[comp.code]) {
+                        neededComponents[comp.code] = { name: comp.name, code: comp.code, qty: 0 };
+                    }
+                    neededComponents[comp.code].qty += comp.qty * prod.qty;
+                });
+            } else {
+                console.log(`[Checklist] No recipe set found for product:`, prod);
+            }
+        });
+        console.log('[Checklist] Needed components:', neededComponents);
+
+        // Filter and fill checklist
+        const checklistTable = document.querySelector('#attribute-523 .attribute-checklist__table');
+        console.log('[Checklist] #attribute-523 .attribute-checklist__table:', checklistTable);
+        if (!checklistTable) {
+            console.log('[Checklist] Checklist table not found.');
+            return;
+        }
+        checklistTable.querySelectorAll('tbody tr').forEach(tr => {
+            const labelCell = tr.querySelector('td.css-1dpfuy6');
+            const textarea = tr.querySelector('textarea');
+            if (labelCell && textarea) {
+                // Extract code from label (e.g. "Monitor 7” FHD (M001)")
+                const labelTxt = labelCell.textContent;
+                const codeMatch = labelTxt.match(/\(([^)]+)\)/);
+                const code = codeMatch ? codeMatch[1].trim() : null;
+                if (code && neededComponents[code]) {
+                    // Fill quantity
+                    textarea.value = `Ilość: ${neededComponents[code].qty}`;
+                    tr.style.display = '';
+                    console.log(`[Checklist] Showing and filling row for code: ${code}, qty: ${neededComponents[code].qty}`);
+                } else {
+                    tr.style.display = 'none';
+                    console.log(`[Checklist] Hiding row for code: ${code}`);
+                }
+            }
+        });
+
+        // Show and always update needed components in the attribute div (#attribute-523)
+        const attributeDiv = document.getElementById('attribute-523');
+        if (attributeDiv) {
+            let componentsDiv = document.getElementById('needed-components-list');
+            if (!componentsDiv) {
+                componentsDiv = document.createElement('div');
+                componentsDiv.id = 'needed-components-list';
+                componentsDiv.style.marginTop = '10px';
+                componentsDiv.style.background = '#e3f2fd';
+                componentsDiv.style.borderRadius = '8px';
+                componentsDiv.style.padding = '16px 18px';
+                componentsDiv.style.border = '1.5px solid #90caf9';
+                componentsDiv.style.marginBottom = '10px';
+                attributeDiv.prepend(componentsDiv);
+            }
+            // Collect recipe sets used
+            const usedRecipeSets = [];
+            usedProducts.forEach(prod => {
+                if (recipeMap[prod.name]) usedRecipeSets.push(prod.name);
+                else if (recipeMap[prod.code]) usedRecipeSets.push(prod.code);
+            });
+            // Always update the contents
+            let html = '<div style="font-weight:600; color:#1976d2; font-size:1.08em; margin-bottom:10px;">Filtrowanie komponentów na podstawie użytych produktów</div>';
+            html += '<div style="margin-bottom:8px; color:#1976d2; font-size:0.98em;">Wykorzystane receptury: <span style="font-weight:bold;">' + (usedRecipeSets.length ? usedRecipeSets.join(', ') : 'Brak') + '</span></div>';
+            html += '<ul style="list-style:none; padding-left:0; margin-bottom:10px;">';
+            Object.values(neededComponents).forEach(comp => {
+                html += `<li style='margin-bottom:4px;'><span style='font-weight:bold;'>${comp.name} (${comp.code})</span> – Ilość: <span style='font-weight:bold;'>${comp.qty}</span></li>`;
+            });
+            html += '</ul>';
+            componentsDiv.innerHTML = html;
+
+            // Toggle logic for the button
+            let btn = document.getElementById('show-all-checklist-btn');
+            if (!btn) {
+                btn = document.createElement('button');
+                btn.id = 'show-all-checklist-btn';
+                btn.textContent = 'Pokaż wszystkie komponenty';
+                btn.className = 'btn btn-secondary btn-sm';
+                btn.style.marginTop = '10px';
+                btn.dataset.showingAll = 'false';
+                btn.onclick = () => {
+                    const showingAll = btn.dataset.showingAll === 'true';
+                    if (!showingAll) {
+                        checklistTable.querySelectorAll('tbody tr').forEach(tr => {
+                            tr.style.display = '';
+                        });
+                        btn.textContent = 'Pokaż tylko wymagane komponenty';
+                        btn.dataset.showingAll = 'true';
+                    } else {
+                        checklistTable.querySelectorAll('tbody tr').forEach(tr => {
+                            const labelCell = tr.querySelector('td.css-1dpfuy6');
+                            const textarea = tr.querySelector('textarea');
+                            let code = null;
+                            if (labelCell) {
+                                const labelTxt = labelCell.textContent;
+                                const codeMatch = labelTxt.match(/\(([^)]+)\)/);
+                                code = codeMatch ? codeMatch[1].trim() : null;
+                            }
+                            if (code && neededComponents[code]) {
+                                tr.style.display = '';
+                            } else {
+                                tr.style.display = 'none';
+                            }
+                        });
+                        btn.textContent = 'Pokaż wszystkie komponenty';
+                        btn.dataset.showingAll = 'false';
+                    }
+                };
+            }
+            // Remove button if already present elsewhere
+            if (btn.parentNode && btn.parentNode !== componentsDiv) {
+                btn.parentNode.removeChild(btn);
+            }
+            componentsDiv.appendChild(btn);
+        }
+    }
+
+    // Use a global observer for React-driven DOM
+    function observeChecklistTableGlobally() {
+        const checklistTableSelector = '#attribute-523 .attribute-checklist__table';
+        const observer = new MutationObserver((mutations, obs) => {
+            const checklistTable = document.querySelector(checklistTableSelector);
+            const usedProductsTable = document.querySelector('.used-materials__table');
+            const recipeTable = document.querySelector('#attribute-548 table');
+            if (checklistTable && usedProductsTable && recipeTable) {
+                console.log('[Checklist] Global observer: All required tables found, running filterAndFillChecklist');
+                filterAndFillChecklist();
+                obs.disconnect();
+            }
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+    }
+
+    // Run global observer immediately and on DOMContentLoaded
+    document.addEventListener('DOMContentLoaded', () => {
+        console.log('[Checklist] DOMContentLoaded event fired, scheduling observeChecklistTableGlobally');
+        observeChecklistTableGlobally();
+    });
+    observeChecklistTableGlobally();
     console.log("Commission page detected. Checking user status.");
 
-    // Promisify chrome.storage.get for sync storage
+    // Promisify chrome.storage.get for sync and local storage
     const getFromSyncStorage = (keys) => new Promise(resolve => chrome.storage.sync.get(keys, resolve));
+    const getFromLocalStorage = (keys) => new Promise(resolve => chrome.storage.local.get(keys, resolve));
 
-    // First, check if the user is a superuser
-    getFromSyncStorage(['extension_user']).then(storageData => {
-        // Corrected the path to isSuperUser
+    // First, check if the user is a superuser (from local storage)
+    getFromLocalStorage(['extension_user']).then(storageData => {
         if (storageData.extension_user && storageData.extension_user.user && storageData.extension_user.user.isSuperUser) {
             console.log("Superuser detected. Initializing attribute features.");
             addCreateAttributeButton();
@@ -384,3 +584,9 @@ function addAttributeIdsToLabels(attributePriorities) {
         }
     });
 }
+
+//# sourceMappingURL=commissionPage.js.map
+console.log('[Checklist] commissionPage.js loaded');
+
+// Ensure commission page logic runs
+initializeCommissionPage();
