@@ -4,9 +4,12 @@ let fetchWithAuth;
 
 // Encapsulate all commission page logic into a single function
 export function initializeCommissionPage() {
+    // Shared commissionData variable for cross-function access
+    let sharedCommissionData = null;
     // --- Checklist filter and auto-fill logic ---
     function filterAndFillChecklist() {
         console.log('[Checklist] filterAndFillChecklist() called');
+        console.log('[Checklist] sharedCommissionData in filterAndFillChecklist:', sharedCommissionData);
         // Get used products and their quantities
         const usedProductsTable = document.querySelector('.used-materials__table');
         console.log('[Checklist] .used-materials__table:', usedProductsTable);
@@ -78,31 +81,34 @@ export function initializeCommissionPage() {
         });
         console.log('[Checklist] Needed components:', neededComponents);
 
-        // Filter and fill checklist
-        const checklistTable = document.querySelector('#attribute-523 .attribute-checklist__table');
-        console.log('[Checklist] #attribute-523 .attribute-checklist__table:', checklistTable);
-        if (!checklistTable) {
-            console.log('[Checklist] Checklist table not found.');
-            return;
-        }
-        checklistTable.querySelectorAll('tbody tr').forEach(tr => {
-            const labelCell = tr.querySelector('td.css-1dpfuy6');
-            const textarea = tr.querySelector('textarea');
-            if (labelCell && textarea) {
-                // Extract code from label (e.g. "Monitor 7” FHD (M001)")
-                const labelTxt = labelCell.textContent;
-                const codeMatch = labelTxt.match(/\(([^)]+)\)/);
-                const code = codeMatch ? codeMatch[1].trim() : null;
-                if (code && neededComponents[code]) {
-                    // Fill quantity
-                    textarea.value = `Ilość: ${neededComponents[code].qty}`;
-                    tr.style.display = '';
-                    console.log(`[Checklist] Showing and filling row for code: ${code}, qty: ${neededComponents[code].qty}`);
-                } else {
-                    tr.style.display = 'none';
-                    console.log(`[Checklist] Hiding row for code: ${code}`);
-                }
+        // Filter and fill all checklists (523, 549, 565, ...)
+        const checklistIds = [523, 549, 565, 592];
+        checklistIds.forEach(attrId => {
+            const checklistTable = document.querySelector(`#attribute-${attrId} .attribute-checklist__table`);
+            console.log(`[Checklist] #attribute-${attrId} .attribute-checklist__table:`, checklistTable);
+            if (!checklistTable) {
+                console.log(`[Checklist] Checklist table for ${attrId} not found.`);
+                return;
             }
+            checklistTable.querySelectorAll('tbody tr').forEach(tr => {
+                const labelCell = tr.querySelector('td.css-1dpfuy6');
+                const textarea = tr.querySelector('textarea');
+                if (labelCell && textarea) {
+                    // Extract code from label (e.g. "Monitor 7” FHD (M001)")
+                    const labelTxt = labelCell.textContent;
+                    const codeMatch = labelTxt.match(/\(([^)]+)\)/);
+                    const code = codeMatch ? codeMatch[1].trim() : null;
+                    if (code && neededComponents[code]) {
+                        tr.style.display = '';
+                        // Optionally fill textarea only if empty (for initial sync)
+                        // if (textarea.value.trim() === '') textarea.value = `Ilość: ${neededComponents[code].qty}`;
+                        console.log(`[Checklist] Showing and filling row for code: ${code}, qty: ${neededComponents[code].qty}`);
+                    } else {
+                        tr.style.display = 'none';
+                        console.log(`[Checklist] Hiding row for code: ${code}`);
+                    }
+                }
+            });
         });
 
         // Show and always update needed components in the attribute div (#attribute-523)
@@ -179,6 +185,257 @@ export function initializeCommissionPage() {
                 btn.parentNode.removeChild(btn);
             }
             componentsDiv.appendChild(btn);
+
+            // Add 'Załaduj ilość' button
+            let loadBtn = document.getElementById('load-qty-btn');
+            if (!loadBtn) {
+                loadBtn = document.createElement('button');
+                loadBtn.id = 'load-qty-btn';
+                loadBtn.textContent = 'Załaduj ilość';
+                loadBtn.className = 'btn btn-primary btn-sm';
+                loadBtn.style.marginLeft = '10px';
+                loadBtn.onclick = () => {
+                    // For each checklist, prepare rows and synchronize comments
+                    const checklistIds = [523, 549, 565, 592];
+                    let allChecklistRows = {};
+                    checklistIds.forEach(attrId => {
+                        const checklistTable = document.querySelector(`#attribute-${attrId} .attribute-checklist__table`);
+                        if (!checklistTable) return;
+                        checklistTable.querySelectorAll('tbody tr').forEach(tr => {
+                            const labelCell = tr.querySelector('td.css-1dpfuy6');
+                            const textarea = tr.querySelector('textarea');
+                            let code = null;
+                            let name = null;
+                            if (labelCell) {
+                                const labelTxt = labelCell.textContent;
+                                const codeMatch = labelTxt.match(/\(([^)]+)\)/);
+                                code = codeMatch ? codeMatch[1].trim() : null;
+                                name = labelTxt.split('(')[0].trim();
+                            }
+                            if (code) {
+                                if (!allChecklistRows[code]) allChecklistRows[code] = [];
+                                allChecklistRows[code].push({
+                                    attrId,
+                                    tr,
+                                    textarea,
+                                    name,
+                                    qty: neededComponents[code] ? neededComponents[code].qty : '',
+                                    needed: !!neededComponents[code]
+                                });
+                            }
+                        });
+                    });
+                    // Synchronize comments: if any textarea for a code is filled, use that comment for all checklists in PATCH payload only (do not fill textarea in DOM)
+                    let codeQtyMap = {};
+                    Object.entries(allChecklistRows).forEach(([code, rows]) => {
+                        let filledComment = null;
+                        rows.forEach(row => {
+                            if (row.textarea && row.textarea.value.trim() !== '') {
+                                filledComment = row.textarea.value.trim();
+                            }
+                        });
+                        if (filledComment !== null) {
+                            codeQtyMap[code] = filledComment;
+                        }
+                    });
+                    // Prepare PATCH payload for each checklist
+                    let attributesPayload = [];
+                    checklistIds.forEach(attrId => {
+                        // Get attribute value ids from sharedCommissionData
+                        let attributeValueMap = {};
+                        if (sharedCommissionData && sharedCommissionData.data && sharedCommissionData.data.attributes) {
+                            const attrObj = sharedCommissionData.data.attributes.find(attr => attr.id === attrId);
+                            if (attrObj && Array.isArray(attrObj.value)) {
+                                attrObj.value.forEach(val => {
+                                    if (val.value) {
+                                        const codeMatch = val.value.match(/\(([^)]+)\)/);
+                                        if (codeMatch) {
+                                            const code = codeMatch[1].trim();
+                                            attributeValueMap[code] = val.id;
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                        // Prepare rows for PATCH
+                        const checklistTable = document.querySelector(`#attribute-${attrId} .attribute-checklist__table`);
+                        if (!checklistTable) return;
+                        const rows = [];
+                        checklistTable.querySelectorAll('tbody tr').forEach(tr => {
+                            const labelCell = tr.querySelector('td.css-1dpfuy6');
+                            let code = null;
+                            if (labelCell) {
+                                const labelTxt = labelCell.textContent;
+                                const codeMatch = labelTxt.match(/\(([^)]+)\)/);
+                                code = codeMatch ? codeMatch[1].trim() : null;
+                            }
+                            // Zawsze nadpisuj komentarz ilością wyliczoną
+                            if (code && neededComponents[code]) {
+                                let comment = `Ilość: ${neededComponents[code].qty}`;
+                                rows.push({
+                                    id: attributeValueMap[code] !== undefined ? attributeValueMap[code] : null,
+                                    comment,
+                                    selected: true
+                                });
+                            }
+                        });
+                        attributesPayload.push({
+                            id: attrId,
+                            value: rows
+                        });
+                    });
+                    const payload = {
+                        fields: "id",
+                        extra_fields: attributesPayload.map(a => `attributes.${a.id}`).join(','),
+                        setting: { mode_relations_add: 1 },
+                        data: {
+                            attributes: attributesPayload
+                        }
+                    };
+                    console.log('[Załaduj ilość] Prepared API payload:', payload);
+
+                    // Send PATCH request to API
+                    const commissionId = sharedCommissionData?.data?.id;
+                    if (!commissionId) {
+                        console.error('Brak commissionId, nie można wysłać PATCH.');
+                        return;
+                    }
+                    const patchUrl = `/api/commissions/${commissionId}`;
+                    fetchWithAuth(patchUrl, {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(payload)
+                    })
+                    .then(async res => {
+                        const result = await res.json().catch(() => null);
+                        console.log('[Załaduj ilość] PATCH response:', res.status, result);
+                        // Refresh page after successful PATCH
+                        location.reload();
+                    })
+                    .catch(err => {
+                        console.error('[Załaduj ilość] PATCH error:', err);
+                    });
+                };
+            }
+            if (loadBtn.parentNode && loadBtn.parentNode !== componentsDiv) {
+                loadBtn.parentNode.removeChild(loadBtn);
+            }
+            componentsDiv.appendChild(loadBtn);
+
+        // Dodaj przycisk 'Synchronizuj'
+        let syncBtn = document.getElementById('sync-comments-btn');
+        if (!syncBtn) { 
+            syncBtn = document.createElement('button');
+            syncBtn.id = 'sync-comments-btn';
+            syncBtn.textContent = 'Synchronizuj uwagi';
+            syncBtn.className = 'btn btn-warning btn-sm';
+            syncBtn.style.marginLeft = '10px';
+            syncBtn.onclick = () => {
+                // Zbierz komentarze z głównej listy (523)
+                const mainChecklistId = 523;
+                const checklistIds = [523, 549, 565, 592];
+                const mainChecklistTable = document.querySelector(`#attribute-${mainChecklistId} .attribute-checklist__table`);
+                if (!mainChecklistTable) return;
+                // Mapowanie: code -> comment (tylko wypełnione textarea)
+                let codeCommentMap = {};
+                mainChecklistTable.querySelectorAll('tbody tr').forEach(tr => {
+                    const labelCell = tr.querySelector('td.css-1dpfuy6');
+                    const textarea = tr.querySelector('textarea');
+                    let code = null;
+                    if (labelCell) {
+                        const labelTxt = labelCell.textContent;
+                        const codeMatch = labelTxt.match(/\(([^)]+)\)/);
+                        code = codeMatch ? codeMatch[1].trim() : null;
+                    }
+                    if (code && textarea && textarea.value.trim() !== '') {
+                        codeCommentMap[code] = textarea.value.trim();
+                    }
+                });
+
+                // Przygotuj PATCH payload dla wszystkich checklist
+                let attributesPayload = [];
+                checklistIds.forEach(attrId => {
+                    // Pobierz mapę id wartości atrybutów z sharedCommissionData
+                    let attributeValueMap = {};
+                    if (sharedCommissionData && sharedCommissionData.data && sharedCommissionData.data.attributes) {
+                        const attrObj = sharedCommissionData.data.attributes.find(attr => attr.id === attrId);
+                        if (attrObj && Array.isArray(attrObj.value)) {
+                            attrObj.value.forEach(val => {
+                                if (val.value) {
+                                    const codeMatch = val.value.match(/\(([^)]+)\)/);
+                                    if (codeMatch) {
+                                        const code = codeMatch[1].trim();
+                                        attributeValueMap[code] = val.id;
+                                    }
+                                }
+                            });
+                        }
+                    }
+                    // Przygotuj wiersze do PATCH tylko dla kodów z codeCommentMap
+                    const checklistTable = document.querySelector(`#attribute-${attrId} .attribute-checklist__table`);
+                    if (!checklistTable) return;
+                    const rows = [];
+                    checklistTable.querySelectorAll('tbody tr').forEach(tr => {
+                        const labelCell = tr.querySelector('td.css-1dpfuy6');
+                        let code = null;
+                        if (labelCell) {
+                            const labelTxt = labelCell.textContent;
+                            const codeMatch = labelTxt.match(/\(([^)]+)\)/);
+                            code = codeMatch ? codeMatch[1].trim() : null;
+                        }
+                        if (code && codeCommentMap[code]) {
+                            rows.push({
+                                id: attributeValueMap[code] !== undefined ? attributeValueMap[code] : null,
+                                comment: codeCommentMap[code],
+                                selected: true
+                            });
+                        }
+                    });
+                    attributesPayload.push({
+                        id: attrId,
+                        value: rows
+                    });
+                });
+                const payload = {
+                    fields: "id",
+                    extra_fields: attributesPayload.map(a => `attributes.${a.id}`).join(','),
+                    setting: { mode_relations_add: 1 },
+                    data: {
+                        attributes: attributesPayload
+                    }
+                };
+                console.log('[Synchronizuj uwagi] Prepared API payload:', payload);
+
+                // Wyślij PATCH do API
+                const commissionId = sharedCommissionData?.data?.id;
+                if (!commissionId) {
+                    console.error('Brak commissionId, nie można wysłać PATCH.');
+                    return;
+                }
+                const patchUrl = `/api/commissions/${commissionId}`;
+                fetchWithAuth(patchUrl, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                })
+                .then(async res => {
+                    const result = await res.json().catch(() => null);
+                    console.log('[Synchronizuj uwagi] PATCH response:', res.status, result);
+                    location.reload(); // Odśwież stronę po synchronizacji jeśli chcesz
+                })
+                .catch(err => {
+                    console.error('[Synchronizuj uwagi] PATCH error:', err);
+                });
+            };
+        }
+        if (syncBtn.parentNode && syncBtn.parentNode !== componentsDiv) {
+            syncBtn.parentNode.removeChild(syncBtn);
+        }
+        componentsDiv.appendChild(syncBtn);
         }
     }
 
@@ -280,6 +537,9 @@ export function initializeCommissionPage() {
 
             const commissionData = await response.json();
             console.log('Commission data received from API:', commissionData);
+            sharedCommissionData = commissionData;
+            // Call checklist logic again after commissionData is loaded
+            filterAndFillChecklist();
 
             if (commissionData && commissionData.data && commissionData.data.commissionPhase && commissionData.data.commissionPhase.commissionPhaseId === 58) {
                 console.log('Commission phase is 58. Adding Rozliczenie tab and custom info.');
