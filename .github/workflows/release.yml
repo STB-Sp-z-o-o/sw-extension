@@ -63,7 +63,7 @@ jobs:
                -x dist/updates.xml \
                --appVersion ${{ steps.version_bump.outputs.VERSION }} \
                --crxURL "https://STB-Sp-z-o-o.github.io/sw-extension/sw-extension.crx" \
-               .
+               $GITHUB_WORKSPACE
 
       - name: Release New Version
         uses: softprops/action-gh-release@v1
