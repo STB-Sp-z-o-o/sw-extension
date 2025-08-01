@@ -100,7 +100,7 @@ async function authenticate(interactive) {
 
         // Store tokens and expiry time
         const expiryTime = Date.now() + (tokenData.expires_in * 1000);
-        chrome.storage.sync.set({
+        chrome.storage.local.set({
           ms365_token: tokenData.access_token,
           ms365_refresh_token: tokenData.refresh_token,
           ms365_token_expiry: expiryTime
@@ -117,140 +117,9 @@ async function authenticate(interactive) {
   });
 }
 
-// Function to get a SharePoint site ID by its path
-async function getSiteIdByPath(token, sitePath) {
-  // Add a check to ensure sitePath is not null or undefined.
-  if (!sitePath) {
-    throw new Error("SharePoint site path is not configured. Please set it in the extension options.");
-  }
-  // Ensure sitePath starts with a forward slash, which is required by the Graph API format.
-  const correctedSitePath = sitePath.startsWith('/') ? sitePath : `/${sitePath}`;
-
-  const siteUrl = `stabautech.sharepoint.com:${correctedSitePath}`;
-  const apiUrl = `https://graph.microsoft.com/v1.0/sites/${siteUrl}`;
-
-  const response = await fetch(apiUrl, {
-    headers: { 'Authorization': `Bearer ${token}` }
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json();
-    console.error("Graph API Error (getSiteIdByPath):", errorData);
-    throw new Error(`Could not find site with path ${sitePath}: ${response.status}`);
-  }
-
-  const data = await response.json();
-  return data.id;
-}
-
-// Function to fetch available SharePoint lists from a site
-async function getAvailableLists(sitePath) {
-  try {
-    const token = await getAccessToken();
-    // First, get the site ID from the path.
-    const siteId = await getSiteIdByPath(token, sitePath);
-
-    const apiUrl = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists`;
-
-    const response = await fetch(apiUrl, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error("SharePoint API Error (getAvailableLists):", errorData);
-      throw new Error(`Failed to fetch available lists: ${response.status} ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    // We only need the name and id of each list
-    return data.value.map(list => ({ id: list.id, name: list.displayName }));
-  } catch (error) {
-    console.error('Error fetching available SharePoint lists:', error);
-    throw error;
-  }
-}
-
-// Function to search SharePoint list data by Order Number
-async function searchSharePointList(listId, query, sitePath) {
-  try {
-    if (!listId) {
-      throw new Error("No SharePoint list selected. Please choose a list in the extension settings.");
-    }
-
-    if (!query) {
-      return []; // Return empty if the query is empty
-    }
-
-    const token = await getAccessToken();
-    const siteId = await getSiteIdByPath(token, sitePath);
-
-    // The internal field name for "Nr zamówienia" is `Nrzam_x00f3_wienia`.
-    // This is the encoded version of "Nr zamówienia" that the Graph API expects.
-    const internalFieldName = 'Nrzam_x00f3_wienia';
-    const apiUrl = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?$expand=fields&$filter=startswith(fields/${internalFieldName}, '${query}')`;
-
-    const response = await fetch(apiUrl, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'HonorNonIndexedQueriesWarningMayFailRandomly'
-      }
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error("SharePoint API Error:", errorData);
-      throw new Error(`Failed to fetch SharePoint data: ${response.status} ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    return data.value; // The list items are in the 'value' property
-
-  } catch (error) {
-    console.error('Error searching SharePoint list data:', error);
-    throw error; // Re-throw the error to be caught by the message listener
-  }
-}
-
-// THIS FUNCTION IS DEPRECATED AND WILL BE REMOVED
-// Function to fetch available SharePoint lists
-/* async function getSharePointLists() {
-  try {
-    const token = await getAccessToken();
-    const siteId = await getSiteIdByPath(token, "/sites/zamowienia");
-
-    const apiUrl = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists`;
-
-    const response = await fetch(apiUrl, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error("SharePoint API Error (get lists):", errorData);
-      throw new Error(`Failed to fetch SharePoint lists: ${response.status} ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    // Return both id and displayName for the popup
-    return data.value.map(list => ({ id: list.id, displayName: list.displayName }));
-
-  } catch (error) {
-    console.error('Error fetching SharePoint lists:', error);
-    throw error;
-  }
-} */
-
-
 async function getAccessToken() {
   return new Promise((resolve, reject) => {
-    chrome.storage.sync.get(['ms365_token', 'ms365_token_expiry', 'ms365_refresh_token'], (data) => {
+    chrome.storage.local.get(['ms365_token', 'ms365_token_expiry', 'ms365_refresh_token'], (data) => {
       if (chrome.runtime.lastError) {
         return reject(new Error(chrome.runtime.lastError.message));
       }
@@ -301,7 +170,7 @@ async function refreshAccessToken(refreshToken) {
 
   const expiryTime = Date.now() + (tokenData.expires_in * 1000);
   await new Promise((resolve, reject) => {
-    chrome.storage.sync.set({
+    chrome.storage.local.set({
       ms365_token: tokenData.access_token,
       ms365_refresh_token: tokenData.refresh_token,
       ms365_token_expiry: expiryTime
@@ -333,74 +202,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true; // Required for async sendResponse
   }
 
-  if (request.action === 'search_sharepoint') { // This is for the 'Nowa wysyłka' modal
-    const { listId, query, sitePath } = request.params;
-    searchSharePointList(listId, query, sitePath)
-      .then(data => sendResponse({ success: true, data: data }))
-      .catch(error => sendResponse({ success: false, error: error.message }));
-    return true; // Indicates that the response is sent asynchronously
-  }
-
-  if (request.action === 'search_sharepoint_by_field') {
-    const { listId, fieldName, query, sitePath } = request.params;
-    searchSharePointListByField(listId, fieldName, query, sitePath)
-      .then(data => sendResponse({ success: true, data: data }))
-      .catch(error => sendResponse({ success: false, error: error.message }));
-    return true; // Required for async sendResponse
-  }
-
-  if (request.action === 'get_available_lists') {
-    const { sitePath } = request;
-    getAvailableLists(sitePath)
-      .then(lists => sendResponse({ success: true, lists: lists }))
-      .catch(error => sendResponse({ success: false, error: error.message }));
-    return true; // Indicates that the response is sent asynchronously
-  }
-
   if (request.action === 'ms365_logout') {
-    chrome.storage.sync.remove(['ms365_token', 'ms365_refresh_token', 'ms365_token_expiry'], () => {
+    chrome.storage.local.remove(['ms365_token', 'ms365_refresh_token', 'ms365_token_expiry'], () => {
       sendResponse({ success: true });
     });
     return true;
   }
 });
-
-// Generic function to search a SharePoint list by a specific field
-async function searchSharePointListByField(listId, fieldName, query, sitePath) {
-  try {
-    if (!listId) {
-      throw new Error("No SharePoint list ID provided.");
-    }
-    if (!query) {
-      return []; // Return empty if the query is empty
-    }
-
-    const token = await getAccessToken();
-    // Assuming the site path is consistent. If not, this may need to be a parameter too.
-    const siteId = await getSiteIdByPath(token, sitePath);
-
-    // Note: The caller must provide the correct INTERNAL name for the field.
-    const apiUrl = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?$expand=fields&$filter=startswith(fields/${fieldName}, '${query}')`;
-
-    const response = await fetch(apiUrl, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'HonorNonIndexedQueriesWarningMayFailRandomly',
-      }
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error("SharePoint API Error (search by field):", errorData);
-      throw new Error(`Failed to fetch SharePoint data by field: ${response.status} ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    return data.value; // The list items are in the 'value' property
-
-  } catch (error) {
-    console.error('Error searching SharePoint list data by field:', error);
-    throw error; // Re-throw the error to be caught by the message listener
-  }
-}

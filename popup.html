@@ -1,6 +1,7 @@
 <!DOCTYPE html>
-<html>
+<html lang="pl">
 <head>
+  <meta charset="UTF-8">
   <title>SW Extension</title>
   <style>
     body {
@@ -79,122 +80,77 @@
         background: #ccc;
         margin: 20px 0;
     }
-    #sharepoint-list-select {
-        flex-grow: 1;
-        margin-right: 5px;
-    }
-    #save-sharepoint-list {
-        width: auto;
-    }
-    #ms365-status, #sharepoint-list-status {
-        margin-top: 10px;
-        font-weight: bold;
-    }
   </style>
 </head>
 <body>
 
-  <!-- View for initial extension setup (API keys etc.) -->
+  <div id="user-message" style="display:none; margin-bottom:10px; padding:8px; border-radius:4px; background:#f8f9fa; color:#333; border:1px solid #c3e6cb; font-weight:bold;"></div>
+
+  <!-- Widok początkowej konfiguracji rozszerzenia (klucze API itp.) -->
   <div id="initial-setup-view" style="display: none;">
-    <h2>Initial Setup</h2>
-    <input type="text" id="client_id" placeholder="Client ID">
-    <input type="password" id="auth_token" placeholder="Auth Token">
-    <input type="text" id="api_url" placeholder="API URL">
-    <button id="save_settings">Save</button>
+    <h2>Początkowa konfiguracja</h2>
+    <input type="text" id="client_id" placeholder="Identyfikator klienta">
+    <input type="password" id="auth_token" placeholder="Token uwierzytelniający">
+    <input type="text" id="api_url" placeholder="Adres URL API">
+    <button id="save_settings">Zapisz</button>
   </div>
 
-  <!-- View for extension login -->
+  <!-- Widok logowania do rozszerzenia -->
   <div id="login-view" style="display: none;">
-    <h2>Login</h2>
-    <input type="text" id="username" placeholder="Username">
-    <input type="password" id="password" placeholder="Password">
-    <button id="login_button">Login</button>
+    <h2>Logowanie</h2>
+    <input type="text" id="username" placeholder="Nazwa użytkownika">
+    <input type="password" id="password" placeholder="Hasło">
+    <button id="login_button">Zaloguj się</button>
   </div>
 
-  <!-- Main container shown when logged in -->
+  <!-- Główny kontener widoczny po zalogowaniu -->
   <div id="main-container" style="display: none;">
     <div class="tab-nav">
-        <button class="tab-button active" data-tab="main-tab">Main</button>
-        <button class="tab-button" data-tab="settings-tab">Settings</button>
-        <button class="tab-button" data-tab="about-tab">About</button>
+        <button class="tab-button active" data-tab="main-tab">Główna</button>
+        <button class="tab-button" data-tab="settings-tab">Ustawienia</button>
+        <button class="tab-button" data-tab="about-tab">O rozszerzeniu</button>
     </div>
 
-    <!-- Main Tab -->
+    <!-- Zakładka główna -->
     <div id="main-tab" class="tab-content active">
-        <p>Logged in as: <span id="loggedInUser"></span></p>
+        <p>Zalogowano jako: <span id="loggedInUser"></span></p>
         <hr>
-        <h3>MS365 Integration</h3>
-        <div id="ms365-status">Status: <span id="ms365-connection-status" style="color:red;">Not Connected</span></div>
-        <button id="ms365-login-button" style="display: block;">Connect with MS365</button>
-        <button id="ms365-logout-button" style="display: none;">Disconnect from MS365</button>
-        <hr>
-        <button id="logout_button" class="secondary">Logout from Extension</button>
+        <button id="logout_button" class="secondary">Wyloguj się</button>
     </div>
 
-    <!-- Settings Tab -->
+    <!-- Zakładka ustawień -->
     <div id="settings-tab" class="tab-content">
-        <h3>Feature Toggles</h3>
+        <h3>Funkcje</h3>
         <div class="setting-item">
-            <label for="toggle-commission-page">Commission Page</label>
+            <label for="toggle-commission-page">Zlecenia</label>
             <input type="checkbox" id="toggle-commission-page" class="feature-toggle" data-feature="commissionPage">
         </div>
         <div class="setting-item">
-            <label for="toggle-credentials-page">Credentials Page</label>
+            <label for="toggle-credentials-page">Uprawnienia</label>
             <input type="checkbox" id="toggle-credentials-page" class="feature-toggle" data-feature="credentialsPage">
         </div>
         <div class="setting-item">
-            <label for="toggle-edit-page">Permissions Table</label>
+            <label for="toggle-edit-page">Tabela uprawnień</label>
             <input type="checkbox" id="toggle-edit-page" class="feature-toggle" data-feature="editPage">
         </div>
         <div class="setting-item">
-            <label for="toggle-material-cost-enhancement">Material Cost</label>
+            <label for="toggle-material-cost-enhancement">Koszt materiału</label>
             <input type="checkbox" id="toggle-material-cost-enhancement" class="feature-toggle" data-feature="materialCost">
         </div>
         <div class="setting-item">
-            <label for="toggle-filter-management">Filter Management</label>
+            <label for="toggle-filter-management">Zarządzanie filtrami</label>
             <input type="checkbox" id="toggle-filter-management" class="feature-toggle" data-feature="filterManagement">
         </div>
         <div class="setting-item">
-          <label for="route-planner-toggle">Plan trasy dla zleceń montażowych</label>
+          <label for="route-planner-toggle">Planowanie trasy dla zleceń montażowych</label>
           <input type="checkbox" id="route-planner-toggle" class="feature-toggle" data-feature="routePlanner">
         </div>
-        <div id="ms365-settings" style="display: none;">
-            <h4>SharePoint Settings</h4>
-            <div class="ms365-setting-item">
-                <label for="sharepoint-list-select">List for "Nowa wysyłka":</label>
-                <select id="sharepoint-list-select" class="form-control"></select>
-                <div id="sharepoint-list-status" class="status-message"></div>
-            </div>
-            <div class="ms365-setting-item">
-                <label for="sharepoint-site-path-wysylka">SharePoint Site Path for "Nowa wysyłka":</label>
-                <input type="text" id="sharepoint-site-path-wysylka" class="form-control" placeholder="/sites/your-site">
-            </div>
-
-            <hr>
-
-            <h5>CLV Orders Settings</h5>
-            <div class="ms365-setting-item">
-                <label for="sharepoint-list-select-clv">List for "Zamówienia CLV":</label>
-                <select id="sharepoint-list-select-clv" class="form-control"></select>
-                <div id="sharepoint-list-status-clv" class="status-message"></div>
-            </div>
-             <div class="ms365-setting-item">
-                <label for="sharepoint-site-path-clv">SharePoint Site Path for "Zamówienia CLV":</label>
-                <input type="text" id="sharepoint-site-path-clv" class="form-control" placeholder="/sites/your-other-site">
-            </div>
-            <div class="ms365-setting-item">
-                <label for="clv-order-column">Column Name for CLV Order Search:</label>
-                <input type="text" id="clv-order-column" class="form-control" placeholder="Internal column name, e.g., Title">
-                <small>Internal name of the column for CLV order number.</small>
-            </div>
-        </div>
-
-        <button id="save-feature-settings" class="button">Save Feature Settings</button>
+        <button id="save-feature-settings" class="button">Zapisz ustawienia funkcji</button>
     </div>
 
-    <!-- About Tab -->
+    <!-- Zakładka o rozszerzeniu -->
     <div id="about-tab" class="tab-content">
-        <h3>About</h3>
+        <h3>O rozszerzeniu</h3>
         <p>SW Extension v1.0</p>
     </div>
   </div>
