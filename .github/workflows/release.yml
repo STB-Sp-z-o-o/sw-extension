@@ -52,7 +52,7 @@ jobs:
       - name: Pack and sign extension
         run: |
           mkdir -p dist
-          crx3 pack -d . -p ${{ secrets.CHROME_EXTENSION_KEY }} -o dist/sw-extension.crx
+          crx3 pack -d $GITHUB_WORKSPACE -p ${{ secrets.CHROME_EXTENSION_KEY }} -o dist/sw-extension.crx
 
       - name: Get extension ID
         id: get_id
@@ -65,7 +65,7 @@ jobs:
           echo '<?xml version="1.0" encoding="UTF-8"?>' > dist/updates.xml
           echo '<gupdate xmlns="http://www.google.com/update2/response" protocol="2.0">' >> dist/updates.xml
           echo '  <app appid="${{ steps.get_id.outputs.id }}">' >> dist/updates.xml
-          echo '    <updatecheck codebase="https://YOUR_GITHUB_USERNAME.github.io/sw-extension/sw-extension.crx" version="${{ steps.version_bump.outputs.VERSION }}"/>' >> dist/updates.xml
+          echo '    <updatecheck codebase="https://STB-Sp-z-o-o.github.io/sw-extension/sw-extension.crx" version="${{ steps.version_bump.outputs.VERSION }}"/>' >> dist/updates.xml
           echo '  </app>' >> dist/updates.xml
           echo '</gupdate>' >> dist/updates.xml
 
