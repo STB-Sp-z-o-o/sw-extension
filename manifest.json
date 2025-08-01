@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Serwis STB Enhancer",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Enhances the STB Serwis platform with additional features.",
   "permissions": [
     "storage",
