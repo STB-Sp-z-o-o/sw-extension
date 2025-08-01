@@ -52,10 +52,13 @@ jobs:
       - name: List files in workspace
         run: ls -l
 
+      - name: Write private key to file
+        run: echo "${{ secrets.CHROME_EXTENSION_KEY }}" > extension.pem
+
       - name: Pack, sign, and generate update manifest
         run: |
           mkdir -p dist
-          crx3 -p ${{ secrets.CHROME_EXTENSION_KEY }} \
+          crx3 -p extension.pem \
                -o dist/sw-extension.crx \
                -x dist/updates.xml \
                --appVersion ${{ steps.version_bump.outputs.VERSION }} \
