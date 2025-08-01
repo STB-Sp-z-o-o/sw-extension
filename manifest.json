@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Serwis STB Enhancer",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Enhances the STB Serwis platform with additional features.",
   "permissions": [
     "storage",
@@ -13,9 +13,17 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://serwis.stb.tech/*"],
-      "css": ["lib/leaflet.css"],
-      "js": ["lib/xlsx.full.min.js", "lib/leaflet.js", "content.js"]
+      "matches": [
+        "https://serwis.stb.tech/*"
+      ],
+      "css": [
+        "lib/leaflet.css"
+      ],
+      "js": [
+        "lib/xlsx.full.min.js",
+        "lib/leaflet.js",
+        "content.js"
+      ]
     }
   ],
   "action": {
@@ -23,8 +31,19 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["js/main.js", "js/commissionPage.js", "js/filterManagement.js", "js/ui.js", "js/attributePage.js", "js/routePlanner.js", "lib/leaflet.js", "lib/leaflet.css"],
-      "matches": ["https://serwis.stb.tech/*"]
+      "resources": [
+        "js/main.js",
+        "js/commissionPage.js",
+        "js/filterManagement.js",
+        "js/ui.js",
+        "js/attributePage.js",
+        "js/routePlanner.js",
+        "lib/leaflet.js",
+        "lib/leaflet.css"
+      ],
+      "matches": [
+        "https://serwis.stb.tech/*"
+      ]
     }
   ]
 }
