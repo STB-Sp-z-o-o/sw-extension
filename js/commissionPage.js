@@ -4,6 +4,8 @@ let fetchWithAuth;
 
 // Encapsulate all commission page logic into a single function
 export function initializeCommissionPage() {
+    //# sourceMappingURL=commissionPage.js.map
+    console.log('[Checklist] commissionPage.js loaded');
     // Shared commissionData variable for cross-function access
     let sharedCommissionData = null;
     // --- Checklist filter and auto-fill logic ---
@@ -463,10 +465,8 @@ export function initializeCommissionPage() {
     observeChecklistTableGlobally();
     console.log("Commission page detected. Checking user status.");
 
-    // Promisify chrome.storage.get for sync and local storage
-    const getFromSyncStorage = (keys) => new Promise(resolve => chrome.storage.sync.get(keys, resolve));
+    // Promisify chrome.storage.get for local storage only
     const getFromLocalStorage = (keys) => new Promise(resolve => chrome.storage.local.get(keys, resolve));
-
     // First, check if the user is a superuser (from local storage)
     getFromLocalStorage(['extension_user']).then(storageData => {
         if (storageData.extension_user && storageData.extension_user.user && storageData.extension_user.user.isSuperUser) {
@@ -845,8 +845,5 @@ function addAttributeIdsToLabels(attributePriorities) {
     });
 }
 
-//# sourceMappingURL=commissionPage.js.map
-console.log('[Checklist] commissionPage.js loaded');
 
-// Ensure commission page logic runs
-initializeCommissionPage();
+

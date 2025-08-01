@@ -1,13 +1,12 @@
 {
   "manifest_version": 3,
   "name": "Serwis STB Enhancer",
-  "version": "1.5",
+  "version": "1.0.0",
   "description": "Enhances the STB Serwis platform with additional features.",
   "permissions": [
     "storage",
     "activeTab",
-    "scripting",
-    "identity"
+    "scripting"
   ],
   "background": {
     "service_worker": "background.js"
@@ -22,17 +21,9 @@
   "action": {
     "default_popup": "popup.html"
   },
-  "oauth2": {
-    "client_id": "fdc1e0a9-38d3-475d-a89b-8b9147efed00",
-    "tenant_id": "d67b6f10-59b2-4f51-9b9d-db7558d21939",
-    "scopes": [
-      "https://graph.microsoft.com/User.Read",
-      "https://graph.microsoft.com/Sites.Read.All"
-    ]
-  },
   "web_accessible_resources": [
     {
-      "resources": ["js/main.js", "js/commissionPage.js", "js/filterManagement.js", "js/sharepointIntegration.js", "js/ui.js", "js/attributePage.js", "js/routePlanner.js", "lib/leaflet.js", "lib/leaflet.css"],
+      "resources": ["js/main.js", "js/commissionPage.js", "js/filterManagement.js", "js/ui.js", "js/attributePage.js", "js/routePlanner.js", "lib/leaflet.js", "lib/leaflet.css"],
       "matches": ["https://serwis.stb.tech/*"]
     }
   ]
