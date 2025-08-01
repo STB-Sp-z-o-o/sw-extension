@@ -1,0 +1,80 @@
+name: Create Chrome Extension Release
+
+on:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - README.md
+      - .gitignore
+
+jobs:
+  release:
+    name: Create Chrome Extension Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4.1.7
+        with:
+          token: ${{ secrets.RELEASE_GIT_TOKEN }}
+
+      - name: Bump extension version in manifest.json
+        id: version_bump
+        run: |
+          OLD_VERSION=$(jq -r '.version' manifest.json)
+          IFS='.' read -r -a V_PARTS <<< "$OLD_VERSION"
+          V_PARTS[2]=$((V_PARTS[2] + 1))
+          NEW_VERSION="${V_PARTS[0]}.${V_PARTS[1]}.${V_PARTS[2]}"
+          jq ".version = \"$NEW_VERSION\"" manifest.json > manifest.json.tmp && mv manifest.json.tmp manifest.json
+          echo "VERSION=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Commit and push manifest.json version bump
+        run: |
+          git config --global user.email "github@actions.com"
+          git config --global user.name "GitHub Actions"
+          git add manifest.json
+          if [[ -n "$(git diff --cached)" ]]; then
+            git commit -m "Bump extension version to ${{ steps.version_bump.outputs.VERSION }} [skip ci]"
+            git push
+          else
+            echo "No changes to commit"
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install crx3
+        run: npm install -g crx3
+
+      - name: Pack and sign extension
+        run: |
+          mkdir -p dist
+          crx3 pack -d . -p ${{ secrets.CHROME_EXTENSION_KEY }} -o dist/sw-extension.crx
+
+      - name: Get extension ID
+        id: get_id
+        run: |
+          EXT_ID=$(crx3 id -p ${{ secrets.CHROME_EXTENSION_KEY }})
+          echo "id=$EXT_ID" >> $GITHUB_OUTPUT
+
+      - name: Generate updates.xml
+        run: |
+          echo '<?xml version="1.0" encoding="UTF-8"?>' > dist/updates.xml
+          echo '<gupdate xmlns="http://www.google.com/update2/response" protocol="2.0">' >> dist/updates.xml
+          echo '  <app appid="${{ steps.get_id.outputs.id }}">' >> dist/updates.xml
+          echo '    <updatecheck codebase="https://YOUR_GITHUB_USERNAME.github.io/sw-extension/sw-extension.crx" version="${{ steps.version_bump.outputs.VERSION }}"/>' >> dist/updates.xml
+          echo '  </app>' >> dist/updates.xml
+          echo '</gupdate>' >> dist/updates.xml
+
+      - name: Release New Version
+        uses: softprops/action-gh-release@v1
+        with:
+          name: v${{ steps.version_bump.outputs.VERSION }}
+          tag_name: v${{ steps.version_bump.outputs.VERSION }}
+          token: ${{ secrets.RELEASE_GIT_TOKEN }}
+          files: |
+            dist/sw-extension.crx
+            dist/updates.xml
