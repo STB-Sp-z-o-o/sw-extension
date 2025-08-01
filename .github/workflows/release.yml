@@ -49,25 +49,15 @@ jobs:
       - name: Install crx3
         run: npm install -g crx3
 
-      - name: Pack and sign extension
+      - name: Pack, sign, and generate update manifest
         run: |
           mkdir -p dist
-          crx3 pack -d $GITHUB_WORKSPACE -p ${{ secrets.CHROME_EXTENSION_KEY }} -o dist/sw-extension.crx
-
-      - name: Get extension ID
-        id: get_id
-        run: |
-          EXT_ID=$(crx3 id -p ${{ secrets.CHROME_EXTENSION_KEY }})
-          echo "id=$EXT_ID" >> $GITHUB_OUTPUT
-
-      - name: Generate updates.xml
-        run: |
-          echo '<?xml version="1.0" encoding="UTF-8"?>' > dist/updates.xml
-          echo '<gupdate xmlns="http://www.google.com/update2/response" protocol="2.0">' >> dist/updates.xml
-          echo '  <app appid="${{ steps.get_id.outputs.id }}">' >> dist/updates.xml
-          echo '    <updatecheck codebase="https://STB-Sp-z-o-o.github.io/sw-extension/sw-extension.crx" version="${{ steps.version_bump.outputs.VERSION }}"/>' >> dist/updates.xml
-          echo '  </app>' >> dist/updates.xml
-          echo '</gupdate>' >> dist/updates.xml
+          crx3 -p ${{ secrets.CHROME_EXTENSION_KEY }} \
+               -o dist/sw-extension.crx \
+               -x dist/updates.xml \
+               --appVersion ${{ steps.version_bump.outputs.VERSION }} \
+               --crxURL "https://STB-Sp-z-o-o.github.io/sw-extension/sw-extension.crx" \
+               .
 
       - name: Release New Version
         uses: softprops/action-gh-release@v1
