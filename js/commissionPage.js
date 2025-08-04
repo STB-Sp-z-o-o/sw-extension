@@ -1,13 +1,13 @@
 // Logic for the commission page
 
 let fetchWithAuth;
+// Shared commissionData variable for cross-function access (module scope)
+export let sharedCommissionData = null;
 
 // Encapsulate all commission page logic into a single function
 export function initializeCommissionPage() {
     //# sourceMappingURL=commissionPage.js.map
     console.log('[Checklist] commissionPage.js loaded');
-    // Shared commissionData variable for cross-function access
-    let sharedCommissionData = null;
     // --- Checklist filter and auto-fill logic ---
     function filterAndFillChecklist() {
         console.log('[Checklist] filterAndFillChecklist() called');
@@ -463,11 +463,68 @@ export function initializeCommissionPage() {
         observeChecklistTableGlobally();
     });
     observeChecklistTableGlobally();
-    console.log("Commission page detected. Checking user status.");
+    console.log("Commission page detected. Fetching shared commission data.");
+
+    // Define a fetch wrapper that includes the auth token
+    fetchWithAuth = async (url, options = {}) => {
+        const { extension_auth_token, extension_settings } = await Promise.resolve(chrome.storage.local.get(['extension_auth_token', 'extension_settings']));
+
+        if (!extension_auth_token || !extension_settings || !extension_settings.apiUrl) {
+            console.error('Authentication token or API URL not found in sync storage.');
+            return Promise.reject('No auth token or API URL');
+        }
+
+        const headers = {
+            ...options.headers,
+            'Authorization': `Bearer ${extension_auth_token}`,
+            'Content-Type': 'application/json'
+        };
+
+        return fetch(extension_settings.apiUrl + url, { ...options, headers });
+    };
+
+    // Always fetch shared commission data (not restricted to superusers)
+    async function fetchSharedCommissionData() {
+        try {
+            // Extract commission ID from URL pattern: .../commission/show/commission_id/2288
+            const url = window.location.href;
+            const commissionIdMatch = url.match(/\/commission_id\/(\d+)/);
+            const commissionId = commissionIdMatch ? commissionIdMatch[1] : null;
+
+            console.log('Extracting commission ID from URL:', url, 'Result:', commissionId);
+
+            if (!commissionId) {
+                console.error('Could not extract commission ID from URL. Expected pattern: /commission_id/[number]');
+                return;
+            }
+
+            const apiUrl = `/api/commissions/${commissionId}?fields=id,commissionPhase&extra_fields=attributes&setting%5Bwith_relations%5D=true`;
+            const response = await fetchWithAuth(apiUrl);
+
+            if (!response.ok) {
+                throw new Error(`API request failed with status ${response.status}`);
+            }
+
+            const commissionData = await response.json();
+            console.log('Shared commission data received from API:', commissionData);
+            sharedCommissionData = commissionData;
+            
+            // Call checklist logic after commissionData is loaded
+            filterAndFillChecklist();
+            
+            return commissionData;
+        } catch (error) {
+            console.error('Error fetching shared commission data:', error);
+            return null;
+        }
+    }
+
+    // Always fetch the shared commission data
+    fetchSharedCommissionData();
 
     // Promisify chrome.storage.get for local storage only
     const getFromLocalStorage = (keys) => new Promise(resolve => chrome.storage.local.get(keys, resolve));
-    // First, check if the user is a superuser (from local storage)
+    // Check if the user is a superuser (from local storage) for attribute features
     getFromLocalStorage(['extension_user']).then(storageData => {
         if (storageData.extension_user && storageData.extension_user.user && storageData.extension_user.user.isSuperUser) {
             console.log("Superuser detected. Initializing attribute features.");
@@ -499,47 +556,29 @@ export function initializeCommissionPage() {
         observer.observe(document.body, { childList: true, subtree: true });
     }
 
-    // Define a fetch wrapper that includes the auth token
-    fetchWithAuth = async (url, options = {}) => {
-        const { extension_auth_token, extension_settings } = await Promise.resolve(chrome.storage.local.get(['extension_auth_token', 'extension_settings']));
-
-        if (!extension_auth_token || !extension_settings || !extension_settings.apiUrl) {
-            console.error('Authentication token or API URL not found in sync storage.');
-            return Promise.reject('No auth token or API URL');
-        }
-
-        const headers = {
-            ...options.headers,
-            'Authorization': `Bearer ${extension_auth_token}`,
-            'Content-Type': 'application/json'
-        };
-
-        return fetch(extension_settings.apiUrl + url, { ...options, headers });
-    };
-
-    // Main function to fetch data and update the DOM
+    // Main function to display attributes (for superusers only)
     async function initializeAttributeDisplay() {
         try {
-            const urlParts = window.location.href.split('/');
-            const commissionId = urlParts[urlParts.length - 1];
+            // Wait for sharedCommissionData to be available or use it if already loaded
+            let commissionData = sharedCommissionData;
+            if (!commissionData) {
+                console.log('Waiting for shared commission data to be loaded...');
+                // Wait up to 5 seconds for shared data to load
+                for (let i = 0; i < 50; i++) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    if (sharedCommissionData) {
+                        commissionData = sharedCommissionData;
+                        break;
+                    }
+                }
+            }
 
-            if (!commissionId) {
-                console.error('Could not extract commission ID from URL.');
+            if (!commissionData) {
+                console.error('Shared commission data not available for attribute display.');
                 return;
             }
 
-            const apiUrl = `/api/commissions/${commissionId}?fields=id,commissionPhase&extra_fields=attributes&setting%5Bwith_relations%5D=true`;
-            const response = await fetchWithAuth(apiUrl);
-
-            if (!response.ok) {
-                throw new Error(`API request failed with status ${response.status}`);
-            }
-
-            const commissionData = await response.json();
-            console.log('Commission data received from API:', commissionData);
-            sharedCommissionData = commissionData;
-            // Call checklist logic again after commissionData is loaded
-            filterAndFillChecklist();
+            console.log('Using shared commission data for attribute display:', commissionData);
 
             if (commissionData && commissionData.data && commissionData.data.commissionPhase && commissionData.data.commissionPhase.commissionPhaseId === 58) {
                 console.log('Commission phase is 58. Adding Rozliczenie tab and custom info.');
