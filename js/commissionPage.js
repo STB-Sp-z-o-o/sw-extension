@@ -155,26 +155,40 @@ export function initializeCommissionPage() {
                 btn.dataset.showingAll = 'false';
                 btn.onclick = () => {
                     const showingAll = btn.dataset.showingAll === 'true';
+                    const checklistIds = [523, 549, 565, 592];
+                    
                     if (!showingAll) {
-                        checklistTable.querySelectorAll('tbody tr').forEach(tr => {
-                            tr.style.display = '';
+                        // Show all components in all checklists
+                        checklistIds.forEach(attrId => {
+                            const checklistTable = document.querySelector(`#attribute-${attrId} .attribute-checklist__table`);
+                            if (checklistTable) {
+                                checklistTable.querySelectorAll('tbody tr').forEach(tr => {
+                                    tr.style.display = '';
+                                });
+                            }
                         });
                         btn.textContent = 'Pokaż tylko wymagane komponenty';
                         btn.dataset.showingAll = 'true';
                     } else {
-                        checklistTable.querySelectorAll('tbody tr').forEach(tr => {
-                            const labelCell = tr.querySelector('td.css-1dpfuy6');
-                            const textarea = tr.querySelector('textarea');
-                            let code = null;
-                            if (labelCell) {
-                                const labelTxt = labelCell.textContent;
-                                const codeMatch = labelTxt.match(/\(([^)]+)\)/);
-                                code = codeMatch ? codeMatch[1].trim() : null;
-                            }
-                            if (code && neededComponents[code]) {
-                                tr.style.display = '';
-                            } else {
-                                tr.style.display = 'none';
+                        // Show only needed components in all checklists
+                        checklistIds.forEach(attrId => {
+                            const checklistTable = document.querySelector(`#attribute-${attrId} .attribute-checklist__table`);
+                            if (checklistTable) {
+                                checklistTable.querySelectorAll('tbody tr').forEach(tr => {
+                                    const labelCell = tr.querySelector('td.css-1dpfuy6');
+                                    const textarea = tr.querySelector('textarea');
+                                    let code = null;
+                                    if (labelCell) {
+                                        const labelTxt = labelCell.textContent;
+                                        const codeMatch = labelTxt.match(/\(([^)]+)\)/);
+                                        code = codeMatch ? codeMatch[1].trim() : null;
+                                    }
+                                    if (code && neededComponents[code]) {
+                                        tr.style.display = '';
+                                    } else {
+                                        tr.style.display = 'none';
+                                    }
+                                });
                             }
                         });
                         btn.textContent = 'Pokaż wszystkie komponenty';
@@ -271,15 +285,22 @@ export function initializeCommissionPage() {
                                 const codeMatch = labelTxt.match(/\(([^)]+)\)/);
                                 code = codeMatch ? codeMatch[1].trim() : null;
                             }
-                            // Zawsze nadpisuj komentarz ilością wyliczoną
-                            if (code && neededComponents[code]) {
-                                let comment = `Ilość: ${neededComponents[code].qty}`;
-                                rows.push({
-                                    id: attributeValueMap[code] !== undefined ? attributeValueMap[code] : null,
-                                    comment,
-                                    selected: true
-                                });
+                        // Zawsze nadpisuj komentarz ilością wyliczoną
+                        if (code && neededComponents[code]) {
+                            let comment = `Ilość: ${neededComponents[code].qty}`;
+                            
+                            // For checklist 523, set to "no" (false) by default when loading quantities
+                            let selected = true; // Default for other checklists
+                            if (attrId === 523) {
+                                selected = false; // Always set to "no" for checklist 523
                             }
+                            
+                            rows.push({
+                                id: attributeValueMap[code] !== undefined ? attributeValueMap[code] : null,
+                                comment,
+                                selected: selected
+                            });
+                        }
                         });
                         attributesPayload.push({
                             id: attrId,
@@ -387,13 +408,20 @@ export function initializeCommissionPage() {
                             const codeMatch = labelTxt.match(/\(([^)]+)\)/);
                             code = codeMatch ? codeMatch[1].trim() : null;
                         }
-                        if (code && codeCommentMap[code]) {
-                            rows.push({
-                                id: attributeValueMap[code] !== undefined ? attributeValueMap[code] : null,
-                                comment: codeCommentMap[code],
-                                selected: true
-                            });
+                    if (code && codeCommentMap[code]) {
+                        // For checklist 523, preserve the current selected state from the checkbox
+                        let selected = true; // Default for other checklists
+                        if (attrId === 523) {
+                            const checkbox = tr.querySelector('input[type="checkbox"]');
+                            selected = checkbox ? checkbox.checked : false;
                         }
+                        
+                        rows.push({
+                            id: attributeValueMap[code] !== undefined ? attributeValueMap[code] : null,
+                            comment: codeCommentMap[code],
+                            selected: selected
+                        });
+                    }
                     });
                     attributesPayload.push({
                         id: attrId,
