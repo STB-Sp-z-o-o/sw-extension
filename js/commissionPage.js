@@ -501,7 +501,7 @@ export function initializeCommissionPage() {
 
     // Define a fetch wrapper that includes the auth token
     fetchWithAuth = async (url, options = {}) => {
-        const { extension_auth_token, extension_settings } = await getFromSyncStorage(['extension_auth_token', 'extension_settings']);
+        const { extension_auth_token, extension_settings } = await Promise.resolve(chrome.storage.local.get(['extension_auth_token', 'extension_settings']));
 
         if (!extension_auth_token || !extension_settings || !extension_settings.apiUrl) {
             console.error('Authentication token or API URL not found in sync storage.');
