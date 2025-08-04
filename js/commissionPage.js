@@ -1,13 +1,13 @@
 // Logic for the commission page
 
 let fetchWithAuth;
+// Shared commissionData variable for cross-function access (module scope)
+export let sharedCommissionData = null;
 
 // Encapsulate all commission page logic into a single function
 export function initializeCommissionPage() {
     //# sourceMappingURL=commissionPage.js.map
     console.log('[Checklist] commissionPage.js loaded');
-    // Shared commissionData variable for cross-function access
-    let sharedCommissionData = null;
     // --- Checklist filter and auto-fill logic ---
     function filterAndFillChecklist() {
         console.log('[Checklist] filterAndFillChecklist() called');
@@ -155,26 +155,40 @@ export function initializeCommissionPage() {
                 btn.dataset.showingAll = 'false';
                 btn.onclick = () => {
                     const showingAll = btn.dataset.showingAll === 'true';
+                    const checklistIds = [523, 549, 565, 592];
+                    
                     if (!showingAll) {
-                        checklistTable.querySelectorAll('tbody tr').forEach(tr => {
-                            tr.style.display = '';
+                        // Show all components in all checklists
+                        checklistIds.forEach(attrId => {
+                            const checklistTable = document.querySelector(`#attribute-${attrId} .attribute-checklist__table`);
+                            if (checklistTable) {
+                                checklistTable.querySelectorAll('tbody tr').forEach(tr => {
+                                    tr.style.display = '';
+                                });
+                            }
                         });
                         btn.textContent = 'Pokaż tylko wymagane komponenty';
                         btn.dataset.showingAll = 'true';
                     } else {
-                        checklistTable.querySelectorAll('tbody tr').forEach(tr => {
-                            const labelCell = tr.querySelector('td.css-1dpfuy6');
-                            const textarea = tr.querySelector('textarea');
-                            let code = null;
-                            if (labelCell) {
-                                const labelTxt = labelCell.textContent;
-                                const codeMatch = labelTxt.match(/\(([^)]+)\)/);
-                                code = codeMatch ? codeMatch[1].trim() : null;
-                            }
-                            if (code && neededComponents[code]) {
-                                tr.style.display = '';
-                            } else {
-                                tr.style.display = 'none';
+                        // Show only needed components in all checklists
+                        checklistIds.forEach(attrId => {
+                            const checklistTable = document.querySelector(`#attribute-${attrId} .attribute-checklist__table`);
+                            if (checklistTable) {
+                                checklistTable.querySelectorAll('tbody tr').forEach(tr => {
+                                    const labelCell = tr.querySelector('td.css-1dpfuy6');
+                                    const textarea = tr.querySelector('textarea');
+                                    let code = null;
+                                    if (labelCell) {
+                                        const labelTxt = labelCell.textContent;
+                                        const codeMatch = labelTxt.match(/\(([^)]+)\)/);
+                                        code = codeMatch ? codeMatch[1].trim() : null;
+                                    }
+                                    if (code && neededComponents[code]) {
+                                        tr.style.display = '';
+                                    } else {
+                                        tr.style.display = 'none';
+                                    }
+                                });
                             }
                         });
                         btn.textContent = 'Pokaż wszystkie komponenty';
@@ -271,15 +285,22 @@ export function initializeCommissionPage() {
                                 const codeMatch = labelTxt.match(/\(([^)]+)\)/);
                                 code = codeMatch ? codeMatch[1].trim() : null;
                             }
-                            // Zawsze nadpisuj komentarz ilością wyliczoną
-                            if (code && neededComponents[code]) {
-                                let comment = `Ilość: ${neededComponents[code].qty}`;
-                                rows.push({
-                                    id: attributeValueMap[code] !== undefined ? attributeValueMap[code] : null,
-                                    comment,
-                                    selected: true
-                                });
+                        // Zawsze nadpisuj komentarz ilością wyliczoną
+                        if (code && neededComponents[code]) {
+                            let comment = `Ilość: ${neededComponents[code].qty}`;
+                            
+                            // For checklist 523, set to "no" (false) by default when loading quantities
+                            let selected = true; // Default for other checklists
+                            if (attrId === 523) {
+                                selected = false; // Always set to "no" for checklist 523
                             }
+                            
+                            rows.push({
+                                id: attributeValueMap[code] !== undefined ? attributeValueMap[code] : null,
+                                comment,
+                                selected: selected
+                            });
+                        }
                         });
                         attributesPayload.push({
                             id: attrId,
@@ -387,13 +408,20 @@ export function initializeCommissionPage() {
                             const codeMatch = labelTxt.match(/\(([^)]+)\)/);
                             code = codeMatch ? codeMatch[1].trim() : null;
                         }
-                        if (code && codeCommentMap[code]) {
-                            rows.push({
-                                id: attributeValueMap[code] !== undefined ? attributeValueMap[code] : null,
-                                comment: codeCommentMap[code],
-                                selected: true
-                            });
+                    if (code && codeCommentMap[code]) {
+                        // For checklist 523, preserve the current selected state from the checkbox
+                        let selected = true; // Default for other checklists
+                        if (attrId === 523) {
+                            const checkbox = tr.querySelector('input[type="checkbox"]');
+                            selected = checkbox ? checkbox.checked : false;
                         }
+                        
+                        rows.push({
+                            id: attributeValueMap[code] !== undefined ? attributeValueMap[code] : null,
+                            comment: codeCommentMap[code],
+                            selected: selected
+                        });
+                    }
                     });
                     attributesPayload.push({
                         id: attrId,
@@ -463,11 +491,68 @@ export function initializeCommissionPage() {
         observeChecklistTableGlobally();
     });
     observeChecklistTableGlobally();
-    console.log("Commission page detected. Checking user status.");
+    console.log("Commission page detected. Fetching shared commission data.");
+
+    // Define a fetch wrapper that includes the auth token
+    fetchWithAuth = async (url, options = {}) => {
+        const { extension_auth_token, extension_settings } = await Promise.resolve(chrome.storage.local.get(['extension_auth_token', 'extension_settings']));
+
+        if (!extension_auth_token || !extension_settings || !extension_settings.apiUrl) {
+            console.error('Authentication token or API URL not found in sync storage.');
+            return Promise.reject('No auth token or API URL');
+        }
+
+        const headers = {
+            ...options.headers,
+            'Authorization': `Bearer ${extension_auth_token}`,
+            'Content-Type': 'application/json'
+        };
+
+        return fetch(extension_settings.apiUrl + url, { ...options, headers });
+    };
+
+    // Always fetch shared commission data (not restricted to superusers)
+    async function fetchSharedCommissionData() {
+        try {
+            // Extract commission ID from URL pattern: .../commission/show/commission_id/2288
+            const url = window.location.href;
+            const commissionIdMatch = url.match(/\/commission_id\/(\d+)/);
+            const commissionId = commissionIdMatch ? commissionIdMatch[1] : null;
+
+            console.log('Extracting commission ID from URL:', url, 'Result:', commissionId);
+
+            if (!commissionId) {
+                console.error('Could not extract commission ID from URL. Expected pattern: /commission_id/[number]');
+                return;
+            }
+
+            const apiUrl = `/api/commissions/${commissionId}?fields=id,commissionPhase&extra_fields=attributes&setting%5Bwith_relations%5D=true`;
+            const response = await fetchWithAuth(apiUrl);
+
+            if (!response.ok) {
+                throw new Error(`API request failed with status ${response.status}`);
+            }
+
+            const commissionData = await response.json();
+            console.log('Shared commission data received from API:', commissionData);
+            sharedCommissionData = commissionData;
+            
+            // Call checklist logic after commissionData is loaded
+            filterAndFillChecklist();
+            
+            return commissionData;
+        } catch (error) {
+            console.error('Error fetching shared commission data:', error);
+            return null;
+        }
+    }
+
+    // Always fetch the shared commission data
+    fetchSharedCommissionData();
 
     // Promisify chrome.storage.get for local storage only
     const getFromLocalStorage = (keys) => new Promise(resolve => chrome.storage.local.get(keys, resolve));
-    // First, check if the user is a superuser (from local storage)
+    // Check if the user is a superuser (from local storage) for attribute features
     getFromLocalStorage(['extension_user']).then(storageData => {
         if (storageData.extension_user && storageData.extension_user.user && storageData.extension_user.user.isSuperUser) {
             console.log("Superuser detected. Initializing attribute features.");
@@ -499,47 +584,29 @@ export function initializeCommissionPage() {
         observer.observe(document.body, { childList: true, subtree: true });
     }
 
-    // Define a fetch wrapper that includes the auth token
-    fetchWithAuth = async (url, options = {}) => {
-        const { extension_auth_token, extension_settings } = await Promise.resolve(chrome.storage.local.get(['extension_auth_token', 'extension_settings']));
-
-        if (!extension_auth_token || !extension_settings || !extension_settings.apiUrl) {
-            console.error('Authentication token or API URL not found in sync storage.');
-            return Promise.reject('No auth token or API URL');
-        }
-
-        const headers = {
-            ...options.headers,
-            'Authorization': `Bearer ${extension_auth_token}`,
-            'Content-Type': 'application/json'
-        };
-
-        return fetch(extension_settings.apiUrl + url, { ...options, headers });
-    };
-
-    // Main function to fetch data and update the DOM
+    // Main function to display attributes (for superusers only)
     async function initializeAttributeDisplay() {
         try {
-            const urlParts = window.location.href.split('/');
-            const commissionId = urlParts[urlParts.length - 1];
+            // Wait for sharedCommissionData to be available or use it if already loaded
+            let commissionData = sharedCommissionData;
+            if (!commissionData) {
+                console.log('Waiting for shared commission data to be loaded...');
+                // Wait up to 5 seconds for shared data to load
+                for (let i = 0; i < 50; i++) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    if (sharedCommissionData) {
+                        commissionData = sharedCommissionData;
+                        break;
+                    }
+                }
+            }
 
-            if (!commissionId) {
-                console.error('Could not extract commission ID from URL.');
+            if (!commissionData) {
+                console.error('Shared commission data not available for attribute display.');
                 return;
             }
 
-            const apiUrl = `/api/commissions/${commissionId}?fields=id,commissionPhase&extra_fields=attributes&setting%5Bwith_relations%5D=true`;
-            const response = await fetchWithAuth(apiUrl);
-
-            if (!response.ok) {
-                throw new Error(`API request failed with status ${response.status}`);
-            }
-
-            const commissionData = await response.json();
-            console.log('Commission data received from API:', commissionData);
-            sharedCommissionData = commissionData;
-            // Call checklist logic again after commissionData is loaded
-            filterAndFillChecklist();
+            console.log('Using shared commission data for attribute display:', commissionData);
 
             if (commissionData && commissionData.data && commissionData.data.commissionPhase && commissionData.data.commissionPhase.commissionPhaseId === 58) {
                 console.log('Commission phase is 58. Adding Rozliczenie tab and custom info.');
