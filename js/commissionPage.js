@@ -526,7 +526,7 @@ export function initializeCommissionPage() {
                 return;
             }
 
-            const apiUrl = `/api/commissions/${commissionId}?fields=id,commissionPhase&extra_fields=attributes&setting%5Bwith_relations%5D=true`;
+            const apiUrl = `/api/commissions/${commissionId}?extra_fields=attributes,relations&setting%5Bwith_relations%5D=true`;
             const response = await fetchWithAuth(apiUrl);
 
             if (!response.ok) {
@@ -559,8 +559,10 @@ export function initializeCommissionPage() {
             addCreateAttributeButton();
             initializeAttributeDisplay();
         } else {
+            
             console.log("User is not a superuser. Attribute features will not be initialized.");
         }
+        addDuplicateCommissionButton();
     });
 
     function addCreateAttributeButton() {
@@ -582,6 +584,239 @@ export function initializeCommissionPage() {
         });
 
         observer.observe(document.body, { childList: true, subtree: true });
+    }
+
+    function addDuplicateCommissionButton() {
+        const observer = new MutationObserver((mutationsList, observer) => {
+            const targetDiv = document.querySelector('.commission__details');
+            if (targetDiv) {
+                console.log("Target div for duplicate commission button found:", targetDiv);
+                if (!document.querySelector('.duplicate-commission-btn')) {
+                    const duplicateBtn = document.createElement('a');
+                    duplicateBtn.href = '#';
+                    duplicateBtn.textContent = 'Duplikuj proces';
+                    duplicateBtn.classList.add('duplicate-commission-btn', 'btn', 'btn-secondary', 'btn-sm');
+                    duplicateBtn.style.marginLeft = '8px';
+
+                    duplicateBtn.addEventListener('click', async (e) => {
+                        e.preventDefault();
+                        if (duplicateBtn.dataset.loading === 'true') return;
+                        duplicateBtn.dataset.loading = 'true';
+                        const originalText = duplicateBtn.textContent;
+                        duplicateBtn.textContent = 'Duplikowanie...';
+                        const sleep = (ms) => new Promise(res => setTimeout(res, ms));
+
+                        try {
+                            if (!sharedCommissionData || !sharedCommissionData.data) {
+                                alert('Dane zlecenia jeszcze się ładują. Spróbuj ponownie za chwilę.');
+                                return;
+                            }
+
+                            const newCommissionPayload = buildDuplicateCommissionPayload(sharedCommissionData);
+                            const commissionsUserUsers = newCommissionPayload.commissionUserUsers || [];
+                            const attributes = newCommissionPayload.attributes || [];
+                            const positions = newCommissionPayload.positions || [];
+                            const relatedCommissions = newCommissionPayload.relatedCommissions || [];
+                            // renive 
+                            console.log('[Duplicate] Payload prepared:', newCommissionPayload);
+
+                            const createUrl = '/api/commissions'; // Assumed endpoint for creating a commission
+                            const response = await fetchWithAuth(createUrl, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    data: newCommissionPayload.data
+                                })
+                            });
+
+                            const result = await response.json().catch(() => null);
+                            console.log('[Duplicate] Create response:', response.status, result);
+
+                            if (!response.ok) {
+                                throw new Error('Błąd podczas tworzenia zlecenia: ' + response.status);
+                            }
+
+                            const newId = result?.data?.[0]?.id || result?.id;
+
+
+                            // Update comission with attributes and commissionsUserUsers
+                            const updatedCommissionAttributes = {
+                                data: {
+                                    attributes: attributes,
+                                }
+                            }
+
+                            const updatedResult = await fetchWithAuth(`/api/commissions/${newId}`, {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(updatedCommissionAttributes)
+                            });
+
+                            if (updatedResult.ok) {
+                                const updatedData = await updatedResult.json();
+                                console.log('[Duplicate] Update response:', updatedResult.status, updatedData);
+                            } else {
+                                console.error('[Duplicate] Error updating commission:', updatedResult.status);
+                            }
+
+                            // Small wait to ensure commission is fully processed before adding users
+                            await sleep(300);
+                            for (const userId of commissionsUserUsers) {
+                                const userPayload = { data: { commissionsUserUsers: userId } };
+                                console.log('[Duplicate] Adding user', userId, 'to commission', newId);
+                                const respUser = await fetchWithAuth(`/api/commissions/${newId}`, {
+                                    method: 'PATCH',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify(userPayload)
+                                });
+                                if (respUser.ok) {
+                                    const rj = await respUser.json().catch(()=>null);
+                                    console.log('[Duplicate] User added:', userId, rj);
+                                } else {
+                                    console.error('[Duplicate] Failed adding user', userId, 'status:', respUser.status);
+                                }
+                                await sleep(250); // throttle between user patches
+                            }
+
+                            positions.forEach(async (position) => {
+
+                                const positionPayload = {
+                                    data: {
+                                        positions: position
+                                    }
+                                };
+
+                                const response = await fetchWithAuth(`/api/commissions/${newId}`, {
+                                    method: 'PATCH',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify(positionPayload)
+                                });
+
+                                if (response.ok) {
+                                    const responseData = await response.json();
+                                    console.log('[Duplicate] Position added to commission:', responseData);
+                                } else {
+                                    console.error('[Duplicate] Error adding position to commission:', response.status);
+                                }
+                            });
+
+                            relatedCommissions.forEach(async (relatedCommissionId) => {
+
+                                const relatedCommisionPayload = {
+                                    data: {
+                                        relations: {
+                                            commissions: { id: relatedCommissionId, subtype: "parent" }
+                                        }
+                                    }
+                                }
+
+                                const response = await fetchWithAuth(`/api/commissions/${newId}?setting[mode_relations_add]=1`, {
+                                    method: 'PATCH',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify(relatedCommisionPayload)
+                                });
+
+                                if (response.ok) {
+                                    const responseData = await response.json();
+                                    console.log('[Duplicate] Related commission added:', responseData);
+                                } else {
+                                    console.error('[Duplicate] Error adding related commission:', response.status);
+                                }
+                            });
+
+                            if (newId) {
+                                // Open new commission in a new tab
+                                window.open(`/commission/show/commission_id/${newId}`, '_blank');
+                            } else {
+                                alert('Zlecenie utworzone, ale nie udało się odczytać ID nowego zlecenia.');
+                            }
+                        } catch (err) {
+                            console.error('[Duplicate] Error duplicating commission:', err);
+                            alert('Nie udało się zduplikować zlecenia. Szczegóły w konsoli.');
+                        } finally {
+                            duplicateBtn.dataset.loading = 'false';
+                            duplicateBtn.textContent = originalText;
+                        }
+                    });
+
+                    targetDiv.prepend(duplicateBtn);
+                }
+                observer.disconnect(); // Stop observing once the button is added
+            }
+        });
+
+        observer.observe(document.body, { childList: true, subtree: true });
+    }
+
+    // Build payload for creating a duplicated commission based on existing data
+    function buildDuplicateCommissionPayload(src) {
+        const data = src.data || {};
+        const userId = data.user?.id || null;
+        const commissionsUserUsers = data.commissionsUserUsers || [];
+        const accountUserId = data.accountUser?.id || null;
+        const commissionPhaseId = data.commissionPhase?.id || null;
+        const documentSeriesDefinitionId = data.documentSeriesDefinition?.id || null;
+        const company = data.company?.id || null;
+        const place = data.place?.id || null;
+        const positions = data.positions || [];
+        const products = data.relations?.products || [];
+        const servicedProducts = data.relations?.servicedProducts || [];
+        const attributes = data.attributes || [];
+        const relatedCommissions = data.relations?.commissions || [];
+
+        let _attributes = attributes.map(attr => {
+            let originalVal = attr.value;
+            let transformedVal = originalVal;
+
+            // Detect checklist/list attribute (array of option objects with id & selected)
+            if (Array.isArray(originalVal) && originalVal.every(v => v && typeof v === 'object' && 'id' in v && 'value' in v && 'selected' in v)) {
+                const selectedIds = originalVal.filter(v => v.selected).map(v => v.id);
+                // If single-select list use the single id, if multi keep array (even if empty)
+                transformedVal = selectedIds.length === 1 ? selectedIds[0] : selectedIds;
+            }
+
+            return {
+                id: attr.id,
+                value: transformedVal
+            };
+        });
+
+        // Normalize positions (can be array or single object) to creation format
+            let positionsArray = [];
+            if (Array.isArray(positions)) {
+                positionsArray = positions;
+            } else if (positions && typeof positions === 'object') {
+                positionsArray = [positions];
+            }
+
+            const creationPositions = positionsArray.map(p => {
+                const productId = p.productId || p.product || (p.product && p.product.id) || null;
+                return {
+                    product: productId, // creation expects 'product'
+                    productName: p.productName || p.name || '',
+                    productCode: p.productCode || p.code || '',
+                    quantity: p.quantity || 1,
+                    price: p.price !== undefined ? p.price : null
+                };
+            });
+
+        return {
+            commissionUserUsers: commissionsUserUsers.map(u => u.id),
+            attributes: _attributes,
+            positions: creationPositions,
+            relatedCommissions: relatedCommissions.map(c => c.id),
+            data: {
+                documentSeriesDefinition: documentSeriesDefinitionId,
+                commissionPhase: commissionPhaseId,
+                company: company,
+                place: place,
+                accountUser: accountUserId,
+                user: userId
+                // commissionsUserUsers: commissionsUserUsers.map(u => u.id),
+                // positions: positions
+                // "attributes": _attributes
+            }
+        };
     }
 
     // Main function to display attributes (for superusers only)
